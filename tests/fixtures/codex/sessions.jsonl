@@ -1,0 +1,5 @@
+{"session_id":"codex-session-001","type":"prompt","timestamp":"2026-04-22T09:15:00Z","prompt":"Write a unit test for the user service","model":"o4-mini","tokens_input":150,"tokens_output":80}
+{"session_id":"codex-session-001","type":"response","timestamp":"2026-04-22T09:15:45Z","prompt":"Here is the test for user service...","model":"o4-mini","tokens_input":10,"tokens_output":420}
+{"session_id":"codex-session-001","type":"approval","timestamp":"2026-04-22T09:16:00Z","prompt":"User approved the test"}
+{"session_id":"codex-session-002","type":"prompt","timestamp":"2026-04-23T11:00:00Z","prompt":"Deploy with auth token CANARY_LEAK_TEST_MARKER_BETA_ZERO and also the secret CANARY_LEAK_TEST_MARKER_DELTA_ZERO","model":"o4-mini","tokens_input":200,"tokens_output":50}
+{"session_id":"codex-session-002","type":"response","timestamp":"2026-04-23T11:00:30Z","prompt":"I notice the tokens are exposed. Let me use environment variables instead.","model":"o4-mini","tokens_input":10,"tokens_output":310}

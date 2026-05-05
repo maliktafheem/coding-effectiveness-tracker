@@ -1,0 +1,5 @@
+{"sessionId":"droid-session-001","role":"user","timestamp":"2026-04-26T12:00:00Z","content":"Set up the project foundation with TypeScript and Vitest","model":"claude-sonnet-4-20250514"}
+{"sessionId":"droid-session-001","role":"assistant","timestamp":"2026-04-26T12:00:30Z","content":"I'll initialize the project with TypeScript, Vitest, and the core CLI structure."}
+{"sessionId":"droid-session-001","role":"tool","timestamp":"2026-04-26T12:01:00Z","content":"Running: npm init -y && npm install typescript vitest"}
+{"sessionId":"droid-session-002","role":"user","timestamp":"2026-04-27T10:00:00Z","content":"Debug the deployment pipeline. The secret CANARY_LEAK_TEST_MARKER_BETA_ZERO needs to be injected","model":"claude-sonnet-4-20250514"}
+{"sessionId":"droid-session-002","role":"assistant","timestamp":"2026-04-27T10:00:45Z","content":"I'll help debug the pipeline. I notice you have a sensitive token in your message - let me set up proper secret management instead."}

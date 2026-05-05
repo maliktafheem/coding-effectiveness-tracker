@@ -1,0 +1,5 @@
+{"session_id":"bad-session-001","role":"user","timestamp":"2026-04-30T10:00:00Z","content":"This line is valid"}
+this is not valid json at all
+{"session_id":"bad-session-001","role":"assistant","timestamp":"2026-04-30T10:00:30Z","content":"This line is also valid"}
+{"incomplete": true
+{"session_id":"bad-session-002","role":"user","timestamp":"2026-04-30T11:00:00Z","content":"Another valid line"}

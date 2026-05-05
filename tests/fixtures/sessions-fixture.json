@@ -1,0 +1,30 @@
+[
+  {
+    "externalId": "fixture-session-001",
+    "sourceToolId": "codex",
+    "startedAt": "2026-04-20T10:00:00Z",
+    "endedAt": "2026-04-20T10:30:00Z",
+    "summary": "Wrote unit tests for user service",
+    "model": "o4-mini",
+    "tokensInput": 500,
+    "tokensOutput": 1200
+  },
+  {
+    "externalId": "fixture-session-002",
+    "sourceToolId": "claude-code",
+    "startedAt": "2026-04-21T14:00:00Z",
+    "endedAt": "2026-04-21T14:45:00Z",
+    "summary": "Refactored authentication module",
+    "model": "claude-sonnet-4-20250514"
+  },
+  {
+    "externalId": "fixture-session-003",
+    "sourceToolId": "cursor",
+    "startedAt": "2026-04-22T09:00:00Z",
+    "endedAt": "2026-04-22T09:20:00Z",
+    "summary": "Added hover tooltip to chart",
+    "model": "gpt-4.1",
+    "tokensInput": 300,
+    "tokensOutput": 800
+  }
+]

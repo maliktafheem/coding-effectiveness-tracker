@@ -1,6 +1,10 @@
 import { Command } from 'commander';
 import { VERSION } from './version.js';
 import { handleInit } from './commands/init.js';
+import { handleImport } from './commands/import.js';
+
+// Ensure all importers are registered
+import './importers/index.js';
 
 const program = new Command();
 
@@ -19,15 +23,15 @@ program
   .option('--force', 'Force reinitialization (overwrites existing database)', false)
   .action(handleInit);
 
-// Placeholder commands for future milestones
 program
   .command('import')
-  .description('Import AI coding sessions from local tool data')
+  .description('Import AI coding sessions from local tool data (Codex, OpenCode, Claude Code, Cursor, Factory Droid)')
   .option('-d, --data-dir <path>', 'Custom data directory path')
-  .action(() => {
-    console.log('Import command will be available in a future release.');
-    process.exit(0);
-  });
+  .option('-s, --source <path>', 'Explicit source path to import from')
+  .option('-t, --tool <id>', 'Tool id to import (codex, opencode, claude-code, cursor, factory-droid)')
+  .option('-f, --fixture <path>', 'Import from a fixture JSON file')
+  .option('--dry-run', 'Preview import without writing to database', false)
+  .action(handleImport);
 
 program
   .command('report')

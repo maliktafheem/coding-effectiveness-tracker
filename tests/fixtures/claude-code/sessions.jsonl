@@ -1,0 +1,7 @@
+{"sessionId":"claude-session-001","type":"human","timestamp":"2026-04-20T10:00:00Z","content":"Help me refactor the authentication module","model":"claude-sonnet-4-20250514"}
+{"sessionId":"claude-session-001","type":"assistant","timestamp":"2026-04-20T10:00:30Z","content":"I'll help you refactor the auth module. Let me review the current implementation.","model":"claude-sonnet-4-20250514"}
+{"sessionId":"claude-session-001","type":"tool_use","timestamp":"2026-04-20T10:01:00Z","content":"Reading src/auth/index.ts"}
+{"sessionId":"claude-session-002","type":"human","timestamp":"2026-04-21T14:30:00Z","content":"Fix the API key handling for the new endpoint. The key is CANARY_LEAK_TEST_MARKER_ALPHA_ZERO","model":"claude-opus-4-20250514"}
+{"sessionId":"claude-session-002","type":"assistant","timestamp":"2026-04-21T14:30:45Z","content":"I can see the API key in your message. Let me help you fix the endpoint configuration securely.","model":"claude-opus-4-20250514"}
+{"sessionId":"claude-session-002","type":"tool_use","timestamp":"2026-04-21T14:31:00Z","content":"Editing src/api/keys.ts"}
+{"sessionId":"claude-session-002","type":"assistant","timestamp":"2026-04-21T14:35:00Z","content":"Done. The API key is now stored via environment variables instead of hardcoded values."}

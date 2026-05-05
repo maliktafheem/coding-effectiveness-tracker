@@ -1,0 +1,7 @@
+[
+  {"externalId": "valid-session-001", "sourceToolId": "codex", "summary": "Valid session"},
+  {"noId": true},
+  {"externalId": "valid-session-002", "sourceToolId": "claude-code", "summary": "Another valid session"},
+  "not even an object",
+  {"externalId": null, "sourceToolId": null}
+]

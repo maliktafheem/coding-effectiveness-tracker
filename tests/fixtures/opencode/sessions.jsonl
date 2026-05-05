@@ -1,0 +1,4 @@
+{"session_id":"opencode-session-001","role":"user","timestamp":"2026-04-24T08:00:00Z","content":"Create a new React component for the dashboard","model":"gpt-4.1","input_tokens":120,"output_tokens":60}
+{"session_id":"opencode-session-001","role":"assistant","timestamp":"2026-04-24T08:00:30Z","content":"I'll create a Dashboard component with the necessary structure.","model":"gpt-4.1","input_tokens":10,"output_tokens":380}
+{"session_id":"opencode-session-002","role":"user","timestamp":"2026-04-25T16:00:00Z","content":"The CANARY_LEAK_TEST_MARKER_GAMMA_ZERO should be used in the config loader","model":"gpt-4.1","input_tokens":90,"output_tokens":40}
+{"session_id":"opencode-session-002","role":"assistant","timestamp":"2026-04-25T16:00:20Z","content":"I'll configure the loader with the provided content, but I recommend using environment variables for sensitive data.","model":"gpt-4.1","input_tokens":10,"output_tokens":250}

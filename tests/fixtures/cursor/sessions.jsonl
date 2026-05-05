@@ -1,0 +1,6 @@
+{"sessionId":"cursor-session-001","role":"user","timestamp":"2026-04-28T15:00:00Z","content":"Add a hover tooltip to the chart component","model":"gpt-4.1","tokens_input":180,"tokens_output":90}
+{"sessionId":"cursor-session-001","role":"assistant","timestamp":"2026-04-28T15:00:45Z","content":"I'll add a tooltip that appears on hover with the data point details.","model":"gpt-4.1","tokens_input":10,"tokens_output":520}
+{"sessionId":"cursor-session-001","role":"user","timestamp":"2026-04-28T15:05:00Z","content":"Can you also add keyboard navigation?","model":"gpt-4.1","tokens_input":40,"tokens_output":20}
+{"sessionId":"cursor-session-001","role":"assistant","timestamp":"2026-04-28T15:05:30Z","content":"Yes, I'll add keyboard navigation with arrow keys and tab support.","model":"gpt-4.1","tokens_input":10,"tokens_output":310}
+{"sessionId":"cursor-session-002","role":"user","timestamp":"2026-04-29T09:00:00Z","content":"The API key CANARY_LEAK_TEST_MARKER_ALPHA_ZERO should be loaded from env","model":"gpt-4.1","tokens_input":100,"tokens_output":50}
+{"sessionId":"cursor-session-002","role":"assistant","timestamp":"2026-04-29T09:00:30Z","content":"Good idea. I'll refactor the config to load the key from process.env.API_KEY.","model":"gpt-4.1","tokens_input":10,"tokens_output":280}
