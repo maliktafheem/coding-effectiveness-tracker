@@ -6,7 +6,7 @@
  */
 
 import { resolve, relative, isAbsolute } from 'node:path';
-import { lstatSync, realpathSync } from 'node:fs';
+import { lstatSync, realpathSync, readdirSync, type Stats } from 'node:fs';
 
 /**
  * Resolve and validate that a path is within the allowed root.
@@ -59,6 +59,56 @@ export function assertNoSymlinkEscape(root: string, target: string): void {
     if (err instanceof PathSafetyError) throw err;
     // File doesn't exist — that's fine, caller handles missing files
   }
+}
+
+/**
+ * Return the lstat for a path within root, throwing PathSafetyError if the
+ * path is a symlink/junction whose real target escapes root.
+ * Returns the Stats object on success.
+ */
+export function safeLstat(root: string, target: string): Stats {
+  const resolvedRoot = resolve(root);
+  // First check path containment via resolve
+  safeResolvePath(root, target);
+  const stat = lstatSync(target);
+  if (stat.isSymbolicLink()) {
+    const realPath = realpathSync(target);
+    const rel = relative(resolvedRoot, realPath);
+    if (rel.startsWith('..') || (isAbsolute(rel) && !rel.startsWith(resolvedRoot))) {
+      throw new PathSafetyError(
+        `Symlink escape detected: "${target}" resolves to "${realPath}" outside root "${resolvedRoot}"`,
+      );
+    }
+  }
+  return stat;
+}
+
+/**
+ * Safe readdir that skips entries whose symlinks/junctions escape root.
+ * Returns only entry names that are safe to descend into.
+ */
+export function safeReadDir(root: string, dirPath: string): string[] {
+  const resolvedRoot = resolve(root);
+  const entries = readdirSync(dirPath);
+  const safe: string[] = [];
+  for (const entry of entries) {
+    const fullPath = resolve(dirPath, entry);
+    try {
+      const stat = lstatSync(fullPath);
+      if (stat.isSymbolicLink()) {
+        const realPath = realpathSync(fullPath);
+        const rel = relative(resolvedRoot, realPath);
+        if (rel.startsWith('..')) {
+          // Symlink escapes root — skip
+          continue;
+        }
+      }
+      safe.push(entry);
+    } catch {
+      // Cannot stat — skip
+    }
+  }
+  return safe;
 }
 
 export class PathSafetyError extends Error {

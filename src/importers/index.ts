@@ -9,7 +9,7 @@ export type { NormalizedSession, NormalizedEvent, ImportResult, ImportOptions, T
 export { registerImporter, registerAllImporters, getImporters, getImporter, discoverImporters, runImport, runFixtureImport, importFromTool, importAll } from './registry.js';
 export { readJsonl } from './utils.js';
 export { redactSecrets, redactMetadata, findCanaryLeaks, sanitizeForOutput, CANARY_SECRETS, ALL_CANARIES } from './privacy.js';
-export { safeResolvePath, assertNoSymlinkEscape, PathSafetyError } from './path-safety.js';
+export { safeResolvePath, assertNoSymlinkEscape, safeLstat, safeReadDir, PathSafetyError } from './path-safety.js';
 export { ClaudeCodeImporter } from './claude-code.js';
 export { CodexImporter } from './codex.js';
 export { OpenCodeImporter } from './opencode.js';

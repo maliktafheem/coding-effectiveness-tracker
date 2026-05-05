@@ -600,3 +600,127 @@ describe('CLI import command', () => {
     } finally { db.close(); }
   });
 });
+// ─── Regression: camelCase sensitive metadata key redaction ──────────────────
+
+import { redactMetadata } from '../src/importers/privacy.js';
+
+describe('Sensitive metadata key redaction (regression)', () => {
+  const sensitiveVariants = [
+    { key: 'apiKey', value: 'abc123' },
+    { key: 'ApiKey', value: 'abc123' },
+    { key: 'APIKEY', value: 'abc123' },
+    { key: 'api_key', value: 'abc123' },
+    { key: 'api-key', value: 'abc123' },
+    { key: 'accessToken', value: 'tok123' },
+    { key: 'accesstoken', value: 'tok123' },
+    { key: 'access_token', value: 'tok123' },
+    { key: 'access-token', value: 'tok123' },
+    { key: 'authToken', value: 'aut123' },
+    { key: 'authtoken', value: 'aut123' },
+    { key: 'auth_token', value: 'aut123' },
+    { key: 'auth-token', value: 'aut123' },
+    { key: 'secret', value: 's1' },
+    { key: 'SECRET', value: 's1' },
+    { key: 'password', value: 'pw' },
+    { key: 'PASSWORD', value: 'pw' },
+    { key: 'token', value: 'tk' },
+    { key: 'TOKEN', value: 'tk' },
+    { key: 'authorization', value: 'Bearer xyz' },
+    { key: 'AUTH', value: 'authval' },
+  ];
+
+  for (const { key, value } of sensitiveVariants) {
+    it(`redacts metadata key "${key}" regardless of case/style and short value`, () => {
+      const result = redactMetadata({ [key]: value, safeKey: 'keep' });
+      expect(result[key]).toBe('[REDACTED]');
+      expect(result.safeKey).toBe('keep');
+    });
+  }
+
+  it('redacts nested metadata with camelCase sensitive keys', () => {
+    const result = redactMetadata({
+      level1: {
+        apiKey: 'short',
+        accessToken: 'abc',
+        safeField: 'visible',
+      },
+    });
+    expect((result.level1 as Record<string, unknown>).apiKey).toBe('[REDACTED]');
+    expect((result.level1 as Record<string, unknown>).accessToken).toBe('[REDACTED]');
+    expect((result.level1 as Record<string, unknown>).safeField).toBe('visible');
+  });
+});
+
+// ─── Regression: symlink/junction escape prevention ─────────────────────────
+
+import { symlinkSync, mkdirSync } from 'node:fs';
+import { join as pathJoin } from 'node:path';
+
+describe('Symlink/junction escape prevention in importers', () => {
+  let tempDir: string;
+  let storage: Storage;
+
+  beforeEach(() => {
+    tempDir = mkdtempSync(join(tmpdir(), 'cet-symlink-'));
+    storage = createTestStorage(tempDir);
+  });
+  afterEach(() => { storage?.close(); safeCleanup(tempDir); });
+
+  it('importer does not follow symlinks pointing outside import root', () => {
+    // Create an outside canary file that should NOT be read
+    const outsideDir = mkdtempSync(join(tmpdir(), 'cet-outside-'));
+    const canaryValue = 'CANARY_SYMLINK_ESCAPE_UNIQUE_MARKER_XYZZY';
+    const canaryFile = pathJoin(outsideDir, 'codex-sessions.jsonl');
+    writeFileSync(canaryFile, JSON.stringify({
+      session_id: 'escape-session', type: 'user',
+      timestamp: '2026-04-30T10:00:00Z', prompt: canaryValue,
+      model: 'test'
+    }) + '\n');
+
+    // Create import root with a symlink pointing to outside canary
+    const importRoot = pathJoin(tempDir, 'codex-import');
+    mkdirSync(importRoot, { recursive: true });
+    try {
+      symlinkSync(outsideDir, pathJoin(importRoot, 'escape-link'), 'junction');
+    } catch {
+      // On systems without symlink support, skip this test
+      safeCleanup(outsideDir);
+      return;
+    }
+
+    // Run importer - should NOT read the symlinked outside content
+    const result = runImport(new CodexImporter(), { sourcePath: importRoot }, storage);
+
+    // The outside canary should not appear in any imported session
+    for (const session of result.sessions) {
+      expect(JSON.stringify(session)).not.toContain(canaryValue);
+    }
+    // Also verify storage doesn't contain the canary
+    const allSessions = storage.db.prepare('SELECT summary, metadata_json FROM sessions').all() as { summary: string; metadata_json: string }[];
+    for (const s of allSessions) {
+      expect(s.summary || '').not.toContain(canaryValue);
+      expect(s.metadata_json || '').not.toContain(canaryValue);
+    }
+
+    safeCleanup(outsideDir);
+  });
+
+  it('path-safety assertNoSymlinkEscape detects escape via directory junction', async () => {
+    const outsideDir = mkdtempSync(join(tmpdir(), 'cet-outside-'));
+    const rootDir = pathJoin(tempDir, 'root');
+    mkdirSync(rootDir, { recursive: true });
+
+    const linkPath = pathJoin(rootDir, 'escape-link');
+    try {
+      symlinkSync(outsideDir, linkPath, 'junction');
+    } catch {
+      safeCleanup(outsideDir);
+      return;
+    }
+
+    const { assertNoSymlinkEscape } = await import('../src/importers/path-safety.js');
+    expect(() => assertNoSymlinkEscape(rootDir, linkPath)).toThrow();
+
+    safeCleanup(outsideDir);
+  });
+});

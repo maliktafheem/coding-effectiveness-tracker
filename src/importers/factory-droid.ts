@@ -8,11 +8,12 @@
  * - sessionId, role, content, model, timestamp, tokens, etc.
  */
 
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync, lstatSync } from 'node:fs';
 import { join, extname, basename } from 'node:path';
 import type { ToolImporter, ImportOptions, ImportResult } from './types.js';
 import { readJsonl } from './utils.js';
 import { sanitizeForOutput } from './privacy.js';
+import { safeReadDir } from './path-safety.js';
 
 export class FactoryDroidImporter implements ToolImporter {
   readonly toolId = 'factory-droid';
@@ -57,7 +58,7 @@ export class FactoryDroidImporter implements ToolImporter {
       }
 
       const stat = statSync(sourcePath);
-      const files = stat.isFile() ? [sourcePath] : this.findSessionFiles(sourcePath);
+      const files = stat.isFile() ? [sourcePath] : this.findSessionFiles(sourcePath, sourcePath);
 
       for (const file of files) {
         this.parseFile(file, result);
@@ -88,22 +89,22 @@ export class FactoryDroidImporter implements ToolImporter {
     }
   }
 
-  private findSessionFiles(dirPath: string): string[] {
+  private findSessionFiles(dirPath: string, root: string): string[] {
     const files: string[] = [];
     try {
-      const entries = readdirSync(dirPath);
+      const entries = safeReadDir(root, dirPath);
       for (const entry of entries) {
         const fullPath = join(dirPath, entry);
         try {
           const stat = statSync(fullPath);
           if (stat.isFile() && this.isDroidFile(fullPath)) {
             files.push(fullPath);
-          } else if (stat.isDirectory() && !entry.startsWith('.')) {
-            const subEntries = readdirSync(fullPath);
+          } else if (statSync(fullPath).isDirectory() && !entry.startsWith('.')) {
+            const subEntries = safeReadDir(root, fullPath);
             for (const sub of subEntries) {
               const subPath = join(fullPath, sub);
               try {
-                if (statSync(subPath).isFile() && this.isDroidFile(subPath)) {
+                if (!lstatSync(subPath).isSymbolicLink() && statSync(subPath).isFile() && this.isDroidFile(subPath)) {
                   files.push(subPath);
                 }
               } catch { /* skip */ }
@@ -115,7 +116,7 @@ export class FactoryDroidImporter implements ToolImporter {
     // Fallback: read all JSONL/JSON files if no tool-specific files found
     if (files.length === 0) {
       try {
-        const entries = readdirSync(dirPath);
+        const entries = safeReadDir(root, dirPath);
         for (const entry of entries) {
           const fullPath = join(dirPath, entry);
           try {

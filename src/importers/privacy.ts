@@ -73,14 +73,42 @@ export function sanitizeForOutput(text: string, maxLen = 200): string {
 }
 
 /**
- * Redact sensitive fields from a metadata object.
- * Removes keys that look like they contain secrets.
+ * Normalize a metadata key for sensitive-key matching.
+ * Strips hyphens, underscores, and dots, then lowercases.
+ * e.g. "apiKey" -> "apikey", "api_key" -> "apikey", "access-token" -> "accesstoken"
  */
+function normalizeKey(key: string): string {
+  return key.toLowerCase().replace(/[-_.]/g, '');
+}
+
+/**
+ * Sensitive key stems after normalization.
+ * Each entry is the normalized (separator-free, lowercase) form.
+ */
+const SENSITIVE_KEY_STEMS: ReadonlySet<string> = new Set([
+  'apikey',
+  'accesstoken',
+  'authtoken',
+  'token',
+  'secret',
+  'password',
+  'authorization',
+  'auth',
+]);
+
+/**
+ * Check whether a metadata key should be redacted.
+ * Matches regardless of camelCase, snake_case, kebab-case, or UPPER_CASE.
+ */
+function isSensitiveKey(key: string): boolean {
+  const normalized = normalizeKey(key);
+  return SENSITIVE_KEY_STEMS.has(normalized);
+}
+
 export function redactMetadata(obj: Record<string, unknown>): Record<string, unknown> {
-  const sensitiveKeys = ['api_key', 'apiKey', 'token', 'secret', 'password', 'authorization', 'auth'];
   const result: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(obj)) {
-    if (sensitiveKeys.includes(key.toLowerCase())) {
+    if (isSensitiveKey(key)) {
       result[key] = '[REDACTED]';
     } else if (typeof value === 'string') {
       result[key] = redactSecrets(value);
