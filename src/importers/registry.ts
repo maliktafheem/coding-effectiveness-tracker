@@ -110,8 +110,17 @@ export function runImport(
   let imported = 0;
   let skipped = 0;
 
+  // Auto-create projects referenced by sessions
+  const ensureProject = db.prepare(
+    'INSERT OR IGNORE INTO projects (id, name) VALUES (?, ?)'
+  );
+
   const insertAll = db.transaction(() => {
     for (const session of result.sessions) {
+      // Ensure project exists if referenced
+      if (session.projectId) {
+        ensureProject.run(session.projectId, session.projectId);
+      }
       const toolId = session.sourceToolId || importer.toolId;
       if (!session.externalId) {
         skipped++;
@@ -339,4 +348,5 @@ export function registerAllImporters(): void {
   registerImporter(new FactoryDroidImporter());
   registerImporter(new CursorImporter());
 }
+
 

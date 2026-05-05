@@ -2,6 +2,8 @@ import { Command } from 'commander';
 import { VERSION } from './version.js';
 import { handleInit } from './commands/init.js';
 import { handleImport } from './commands/import.js';
+import { handleReport } from './commands/report.js';
+import { handleAnnotate } from './commands/annotate.js';
 
 // Ensure all importers are registered
 import './importers/index.js';
@@ -40,10 +42,22 @@ program
   .description('Generate effectiveness report from imported data')
   .option('-d, --data-dir <path>', 'Custom data directory path')
   .option('--json', 'Output as JSON')
-  .action(() => {
-    console.log('Report command will be available in a future release.');
-    process.exit(0);
-  });
+  .option('-t, --tool <id>', 'Filter by source tool id')
+  .option('-p, --project <id>', 'Filter by project id')
+  .option('--from <date>', 'Start date filter (ISO date or datetime)')
+  .option('--to <date>', 'End date filter (ISO date or datetime)')
+  .action(handleReport);
+
+program
+  .command('annotate')
+  .description('Record a manual outcome annotation for a session')
+  .option('-d, --data-dir <path>', 'Custom data directory path')
+  .option('--session <id>', 'Session ID to annotate (required)')
+  .option('--outcome <label>', 'Outcome label (good, accepted, shipped, ok, poor, rejected, reverted, etc.)')
+  .option('--score <number>', 'Outcome score between 0 and 1')
+  .option('--note <text>', 'Free-text note for the annotation')
+  .option('--tags <tags>', 'Comma-separated tags')
+  .action(handleAnnotate);
 
 program
   .command('serve')
@@ -69,3 +83,4 @@ export { program };
 if (process.argv[1]?.endsWith('cli.ts') || process.argv[1]?.endsWith('cli.js')) {
   program.parse(process.argv);
 }
+

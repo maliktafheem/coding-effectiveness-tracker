@@ -1,0 +1,92 @@
+[
+  {
+    "externalId": "corr-session-001",
+    "sourceToolId": "codex",
+    "projectId": "project-alpha",
+    "startedAt": "2026-04-28T09:00:00Z",
+    "endedAt": "2026-04-28T09:45:00Z",
+    "durationMs": 2700000,
+    "summary": "Implemented user authentication module",
+    "model": "o4-mini",
+    "tokensInput": 1500,
+    "tokensOutput": 3200,
+    "costEstimate": 0.05,
+    "metadata": {"reworkCount": 0}
+  },
+  {
+    "externalId": "corr-session-002",
+    "sourceToolId": "claude-code",
+    "projectId": "project-alpha",
+    "startedAt": "2026-04-28T10:00:00Z",
+    "endedAt": "2026-04-28T11:30:00Z",
+    "durationMs": 5400000,
+    "summary": "Refactored database layer and added migrations",
+    "model": "claude-sonnet-4-20250514",
+    "tokensInput": 4000,
+    "tokensOutput": 8000,
+    "costEstimate": 0.12,
+    "metadata": {"reworkCount": 1}
+  },
+  {
+    "externalId": "corr-session-003",
+    "sourceToolId": "cursor",
+    "projectId": "project-alpha",
+    "startedAt": "2026-04-29T14:00:00Z",
+    "endedAt": "2026-04-29T14:30:00Z",
+    "durationMs": 1800000,
+    "summary": "Added chart tooltip component",
+    "model": "gpt-4.1",
+    "tokensInput": 800,
+    "tokensOutput": 2000,
+    "costEstimate": 0.03,
+    "metadata": {}
+  },
+  {
+    "externalId": "corr-session-004",
+    "sourceToolId": "opencode",
+    "projectId": "project-beta",
+    "startedAt": "2026-04-28T16:00:00Z",
+    "endedAt": "2026-04-28T17:00:00Z",
+    "durationMs": 3600000,
+    "summary": "Built REST API endpoints for products",
+    "model": "gpt-4o",
+    "tokensInput": 2500,
+    "tokensOutput": 5000,
+    "costEstimate": 0.08,
+    "metadata": {"reworkCount": 2}
+  },
+  {
+    "externalId": "corr-session-005",
+    "sourceToolId": "factory-droid",
+    "projectId": "project-beta",
+    "startedAt": "2026-04-29T08:00:00Z",
+    "endedAt": "2026-04-29T08:20:00Z",
+    "durationMs": 1200000,
+    "summary": "Quick bug fix in error handler",
+    "metadata": {}
+  },
+  {
+    "externalId": "corr-session-006",
+    "sourceToolId": "codex",
+    "projectId": "project-alpha",
+    "startedAt": "2026-04-30T23:30:00Z",
+    "endedAt": "2026-05-01T00:30:00Z",
+    "durationMs": 3600000,
+    "summary": "Late night session crossing midnight boundary",
+    "model": "o4-mini",
+    "tokensInput": 1000,
+    "tokensOutput": 2500,
+    "costEstimate": 0.04,
+    "metadata": {}
+  },
+  {
+    "externalId": "corr-session-007",
+    "sourceToolId": "claude-code",
+    "projectId": "project-alpha",
+    "startedAt": "2026-04-27T08:00:00Z",
+    "endedAt": "2026-04-27T08:30:00Z",
+    "durationMs": 1800000,
+    "summary": "Early morning session",
+    "metadata": {"reworkCount": 3}
+  }
+]
