@@ -13,15 +13,34 @@ export async function handleInit(opts: InitOptions): Promise<void> {
   const alreadyInit = isInitialized(dataDir);
 
   if (alreadyInit && !opts.force) {
-    console.log(`Already initialized at: ${dataDir}`);
-    console.log("Use --force to reinitialize.");
-    return;
+    // Validate the existing database health before reporting success.
+    // This detects corrupt or incompatible databases early instead
+    // of silently claiming the workspace is already initialized.
+    let existing: Storage | undefined;
+    try {
+      existing = Storage.open({ dataDir });
+      existing.close();
+      console.log("Already initialized at: " + dataDir);
+      console.log("Use --force to reinitialize.");
+      return;
+    } catch (err) {
+      existing?.close();
+      if (err instanceof StorageError) {
+        console.error("Error: Existing database at " + dataDir + " appears corrupt or incompatible.");
+        console.error("Details: " + err.message);
+        console.error("To recover:");
+        console.error("  1. Back up the existing tracker.db file.");
+        console.error("  2. Run 'cet init --force' to reinitialize.");
+        process.exit(1);
+      }
+      throw err;
+    }
   }
 
   ensureDataDir(dataDir);
 
   if (alreadyInit && opts.force) {
-    console.log(`Reinitializing at: ${dataDir}`);
+    console.log("Reinitializing at: " + dataDir);
   }
 
   let storage: Storage | undefined;
@@ -32,20 +51,20 @@ export async function handleInit(opts: InitOptions): Promise<void> {
       // Move the corrupt database aside and retry
       storage?.close();
       const corruptPath = join(dataDir, "tracker.db");
-      const backupName = `tracker.db.corrupt.${Date.now()}`;
+      const backupName = "tracker.db.corrupt." + Date.now();
       const backupPath = join(dataDir, backupName);
       try {
         renameSync(corruptPath, backupPath);
-        console.log(`Moved corrupt database to: ${backupName}`);
+        console.log("Moved corrupt database to: " + backupName);
       } catch (moveErr) {
         const moveMessage = moveErr instanceof Error ? moveErr.message : String(moveErr);
-        console.error(`Error: Failed to move corrupt database: ${moveMessage}`);
+        console.error("Error: Failed to move corrupt database: " + moveMessage);
         process.exit(1);
       }
       // Retry opening - now with no existing corrupt file
       storage = Storage.open({ dataDir });
     } else if (err instanceof StorageError) {
-      console.error(`Error: ${err.message}`);
+      console.error("Error: " + err.message);
       process.exit(1);
     } else {
       throw err;
@@ -74,13 +93,13 @@ export async function handleInit(opts: InitOptions): Promise<void> {
     });
     insertAll();
 
-    console.log(`Initialized workspace at: ${dataDir}`);
-    console.log(`Database: ${storage.dbPath}`);
+    console.log("Initialized workspace at: " + dataDir);
+    console.log("Database: " + storage.dbPath);
     console.log("Registered AI tools: Codex, OpenCode, Factory Droid, Claude Code, Cursor");
     console.log("Privacy: All data stays local. No telemetry or external services.");
   } catch (err) {
     if (err instanceof StorageError) {
-      console.error(`Error: ${err.message}`);
+      console.error("Error: " + err.message);
       process.exit(1);
     }
     throw err;

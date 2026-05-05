@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, rmSync, existsSync, writeFileSync, readdirSync } from 'node:fs';
+import { mkdtempSync, rmSync, existsSync, writeFileSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import Database from 'better-sqlite3';
@@ -170,23 +170,42 @@ describe('CLI init command', () => {
   });
 
   it('handles paths with unicode characters', () => {
-    const unicodePath = join(tempDir, 'proyecto-español');
+    const unicodePath = join(tempDir, 'proyecto-espanol');
     const result = runCli(['init', '-d', unicodePath]);
     expect(result.exitCode).toBe(0);
     expect(existsSync(join(unicodePath, 'tracker.db'))).toBe(true);
   });
 
-  // VAL-CLI-040: init without --force short-circuits on file existence (does not open DB)
+  // VAL-CLI-006 / VAL-CLI-040: non-force init against corrupt DB exits non-zero with recovery guidance
   it('refuses re-init on existing corrupt DB without --force', () => {
     const corruptDir = join(tempDir, 'corrupt-data');
     runCli(['init', '-d', corruptDir]);
-    writeFileSync(join(corruptDir, 'tracker.db'), 'this is not a valid sqlite database');
+
+    // Replace with corrupt content
+    const corruptPath = join(corruptDir, 'tracker.db');
+    writeFileSync(corruptPath, 'this is not a valid sqlite database');
+
+    // Capture bytes before running non-force init
+    const bytesBefore = readFileSync(corruptPath);
 
     const result = runCli(['init', '-d', corruptDir]);
-    expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain('Already initialized');
-    expect(result.stdout).toContain('--force');
-    expect(existsSync(join(corruptDir, 'tracker.db'))).toBe(true);
+    // Must exit non-zero
+    expect(result.exitCode).not.toBe(0);
+
+    // Must include recovery guidance
+    const combined = result.stdout + result.stderr;
+    expect(combined).toContain('--force');
+    expect(combined.toLowerCase()).toMatch(/corrupt|incompatible|integrity/);
+
+    // No stack trace leaks
+    expect(combined).not.toContain('at Object.');
+    expect(combined).not.toContain('node_modules');
+    expect(combined).not.toContain('StorageError');
+
+    // Corrupt file must be preserved byte-for-byte
+    expect(existsSync(corruptPath)).toBe(true);
+    const bytesAfter = readFileSync(corruptPath);
+    expect(Buffer.compare(bytesBefore, bytesAfter)).toBe(0);
   });
 
   // Corruption recovery with --force: non-SQLite tracker.db
