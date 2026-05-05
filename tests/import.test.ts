@@ -724,3 +724,291 @@ describe('Symlink/junction escape prevention in importers', () => {
     safeCleanup(outsideDir);
   });
 });
+
+// ─── VAL-CLI-011: Explicit --source (without --tool) exits non-zero for missing path ───
+
+describe('VAL-CLI-011: Explicit --source without --tool fails for missing path', () => {
+  let tempDir: string;
+  beforeEach(() => { tempDir = mkdtempSync(join(tmpdir(), 'cet-cli011-')); });
+  afterEach(() => { safeCleanup(tempDir); });
+
+  function runCli(args: string[]): { stdout: string; stderr: string; exitCode: number } {
+    const cliPath = join(process.cwd(), 'bin', 'cli.js');
+    try {
+      const stdout = execFileSync('node', [cliPath, ...args], { encoding: 'utf-8', timeout: 15000 });
+      return { stdout: stdout.trim(), stderr: '', exitCode: 0 };
+    } catch (err: unknown) {
+      const e = err as { stdout?: string; stderr?: string; status?: number };
+      return { stdout: (e.stdout ?? '').trim(), stderr: (e.stderr ?? '').trim(), exitCode: e.status ?? 1 };
+    }
+  }
+
+  it('explicit --source for nonexistent path exits non-zero with path-not-found', () => {
+    runCli(['init', '-d', tempDir]);
+    const missingPath = join(tempDir, 'completely-nonexistent-dir');
+    const result = runCli(['import', '-d', tempDir, '--source', missingPath]);
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr).toMatch(/not found/i);
+  });
+
+  it('explicit --source for nonexistent path does NOT trigger auto-discovery', () => {
+    runCli(['init', '-d', tempDir]);
+    const missingPath = join(tempDir, 'completely-nonexistent-dir');
+    const result = runCli(['import', '-d', tempDir, '--source', missingPath]);
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stdout).not.toMatch(/auto-discover|no ai tool/i);
+  });
+
+  it('explicit --source with path containing spaces exits non-zero for nonexistent', () => {
+    runCli(['init', '-d', tempDir]);
+    const missingPath = join(tempDir, 'path with spaces', 'nonexistent');
+    const result = runCli(['import', '-d', tempDir, '--source', missingPath]);
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr).toMatch(/not found/i);
+  });
+});
+
+// ─── VAL-CLI-012: Unsupported explicit --source format fails safely ───
+
+describe('VAL-CLI-012: Unsupported explicit --source format fails safely', () => {
+  let tempDir: string;
+  beforeEach(() => { tempDir = mkdtempSync(join(tmpdir(), 'cet-cli012-')); });
+  afterEach(() => { safeCleanup(tempDir); });
+
+  function runCli(args: string[]): { stdout: string; stderr: string; exitCode: number } {
+    const cliPath = join(process.cwd(), 'bin', 'cli.js');
+    try {
+      const stdout = execFileSync('node', [cliPath, ...args], { encoding: 'utf-8', timeout: 15000 });
+      return { stdout: stdout.trim(), stderr: '', exitCode: 0 };
+    } catch (err: unknown) {
+      const e = err as { stdout?: string; stderr?: string; status?: number };
+      return { stdout: (e.stdout ?? '').trim(), stderr: (e.stderr ?? '').trim(), exitCode: e.status ?? 1 };
+    }
+  }
+
+  it('explicit --source with unsupported .txt file exits non-zero', () => {
+    runCli(['init', '-d', tempDir]);
+    const txtFile = join(FIXTURES_DIR, 'unsupported', 'notes.txt');
+    const result = runCli(['import', '-d', tempDir, '--source', txtFile]);
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr).toMatch(/unsupported|format|no importer/i);
+  });
+
+  it('unsupported format error does NOT trigger auto-discovery fallback', () => {
+    runCli(['init', '-d', tempDir]);
+    const txtFile = join(FIXTURES_DIR, 'unsupported', 'notes.txt');
+    const result = runCli(['import', '-d', tempDir, '--source', txtFile]);
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stdout).not.toMatch(/auto-discover|no ai tool/i);
+  });
+
+  it('explicit --source with unsupported .csv file exits non-zero', () => {
+    runCli(['init', '-d', tempDir]);
+    const csvFile = join(FIXTURES_DIR, 'unsupported', 'data.csv');
+    const result = runCli(['import', '-d', tempDir, '--source', csvFile]);
+    expect(result.exitCode).not.toBe(0);
+  });
+
+  it('DB remains unchanged after unsupported format rejection', () => {
+    runCli(['init', '-d', tempDir]);
+    const txtFile = join(FIXTURES_DIR, 'unsupported', 'notes.txt');
+    runCli(['import', '-d', tempDir, '--source', txtFile]);
+    const db = new Database(join(tempDir, 'tracker.db'), { readonly: true });
+    try {
+      expect((db.prepare('SELECT count(*) as cnt FROM sessions').get() as { cnt: number }).cnt).toBe(0);
+    } finally { db.close(); }
+  });
+});
+
+// ─── VAL-CLI-019: Auto-discovery requires --discover flag ───
+
+describe('VAL-CLI-019: Auto-discovery requires --discover flag', () => {
+  let tempDir: string;
+  beforeEach(() => { tempDir = mkdtempSync(join(tmpdir(), 'cet-cli019-')); });
+  afterEach(() => { safeCleanup(tempDir); });
+
+  function runCli(args: string[]): { stdout: string; stderr: string; exitCode: number } {
+    const cliPath = join(process.cwd(), 'bin', 'cli.js');
+    try {
+      const stdout = execFileSync('node', [cliPath, ...args], { encoding: 'utf-8', timeout: 15000 });
+      return { stdout: stdout.trim(), stderr: '', exitCode: 0 };
+    } catch (err: unknown) {
+      const e = err as { stdout?: string; stderr?: string; status?: number };
+      return { stdout: (e.stdout ?? '').trim(), stderr: (e.stderr ?? '').trim(), exitCode: e.status ?? 1 };
+    }
+  }
+
+  it('without --discover, no-auto-import shows guidance', () => {
+    runCli(['init', '-d', tempDir]);
+    const result = runCli(['import', '-d', tempDir]);
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toMatch(/--source|--discover/i);
+    expect(result.stdout).not.toMatch(/auto-discover.*importing/i);
+  });
+
+  it('with --discover, auto-discovery proceeds', () => {
+    runCli(['init', '-d', tempDir]);
+    const result = runCli(['import', '-d', tempDir, '--discover']);
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toMatch(/No AI tool|discovered|import/i);
+  });
+
+  it('without --discover, DB is not written to', () => {
+    runCli(['init', '-d', tempDir]);
+    runCli(['import', '-d', tempDir]);
+    const db = new Database(join(tempDir, 'tracker.db'), { readonly: true });
+    try {
+      expect((db.prepare('SELECT count(*) as cnt FROM sessions').get() as { cnt: number }).cnt).toBe(0);
+    } finally { db.close(); }
+  });
+});
+
+// ─── VAL-CLI-020: Dry-run with explicit --source respects scope ───
+
+describe('VAL-CLI-020: Dry-run with explicit --source is scoped and non-mutating', () => {
+  let tempDir: string;
+  beforeEach(() => { tempDir = mkdtempSync(join(tmpdir(), 'cet-cli020-')); });
+  afterEach(() => { safeCleanup(tempDir); });
+
+  function runCli(args: string[]): { stdout: string; stderr: string; exitCode: number } {
+    const cliPath = join(process.cwd(), 'bin', 'cli.js');
+    try {
+      const stdout = execFileSync('node', [cliPath, ...args], { encoding: 'utf-8', timeout: 15000 });
+      return { stdout: stdout.trim(), stderr: '', exitCode: 0 };
+    } catch (err: unknown) {
+      const e = err as { stdout?: string; stderr?: string; status?: number };
+      return { stdout: (e.stdout ?? '').trim(), stderr: (e.stderr ?? '').trim(), exitCode: e.status ?? 1 };
+    }
+  }
+
+  it('dry-run with explicit --source only scopes to that source', () => {
+    runCli(['init', '-d', tempDir]);
+    const fixtureDir = join(FIXTURES_DIR, 'codex');
+    const result = runCli(['import', '-d', tempDir, '--source', fixtureDir, '--dry-run']);
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toMatch(/dry-run/i);
+    expect(result.stdout).toMatch(/codex/i);
+    expect(result.stdout).not.toMatch(/claude|opencode|cursor/i);
+  });
+
+  it('dry-run does not write to DB even with explicit source', () => {
+    runCli(['init', '-d', tempDir]);
+    const fixtureDir = join(FIXTURES_DIR, 'codex');
+    runCli(['import', '-d', tempDir, '--source', fixtureDir, '--dry-run']);
+    const db = new Database(join(tempDir, 'tracker.db'), { readonly: true });
+    try {
+      expect((db.prepare('SELECT count(*) as cnt FROM sessions').get() as { cnt: number }).cnt).toBe(0);
+    } finally { db.close(); }
+  });
+
+  it('dry-run with fixture path reports count without writing', () => {
+    runCli(['init', '-d', tempDir]);
+    const fixturePath = join(FIXTURES_DIR, 'sessions-fixture.json');
+    const result = runCli(['import', '-d', tempDir, '--fixture', fixturePath, '--dry-run']);
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toMatch(/dry-run/i);
+    const db = new Database(join(tempDir, 'tracker.db'), { readonly: true });
+    try {
+      expect((db.prepare('SELECT count(*) as cnt FROM sessions').get() as { cnt: number }).cnt).toBe(0);
+    } finally { db.close(); }
+  });
+});
+
+// ─── VAL-CLI-042: Verbose/debug logging remains privacy-safe ───
+
+describe('VAL-CLI-042: Verbose logging is privacy-safe', () => {
+  let tempDir: string;
+  beforeEach(() => { tempDir = mkdtempSync(join(tmpdir(), 'cet-cli042-')); });
+  afterEach(() => { safeCleanup(tempDir); });
+
+  function runCli(args: string[]): { stdout: string; stderr: string; exitCode: number } {
+    const cliPath = join(process.cwd(), 'bin', 'cli.js');
+    try {
+      const stdout = execFileSync('node', [cliPath, ...args], { encoding: 'utf-8', timeout: 15000 });
+      return { stdout: stdout.trim(), stderr: '', exitCode: 0 };
+    } catch (err: unknown) {
+      const e = err as { stdout?: string; stderr?: string; status?: number };
+      return { stdout: (e.stdout ?? '').trim(), stderr: (e.stderr ?? '').trim(), exitCode: e.status ?? 1 };
+    }
+  }
+
+  it('--verbose produces additional diagnostic output', () => {
+    runCli(['init', '-d', tempDir]);
+    const result = runCli(['import', '-d', tempDir, '--discover', '--verbose']);
+    expect(result.stdout).toMatch(/\[verbose\]/);
+  });
+
+  it('verbose output with fixture import does not leak canary secrets', () => {
+    runCli(['init', '-d', tempDir]);
+    const fixturePath = join(FIXTURES_DIR, 'sessions-fixture.json');
+    const result = runCli(['import', '-d', tempDir, '--fixture', fixturePath, '--verbose']);
+    const combinedOutput = result.stdout + "`n" + result.stderr;
+    for (const canary of ALL_CANARIES) {
+      expect(combinedOutput).not.toContain(canary);
+    }
+  });
+
+  it('verbose output with tool import does not leak canary secrets', () => {
+    runCli(['init', '-d', tempDir]);
+    const codexDir = join(FIXTURES_DIR, 'codex');
+    const result = runCli(['import', '-d', tempDir, '--tool', 'codex', '--source', codexDir, '--verbose']);
+    const combinedOutput = result.stdout + "`n" + result.stderr;
+    for (const canary of ALL_CANARIES) {
+      expect(combinedOutput).not.toContain(canary);
+    }
+  });
+
+  it('verbose output shows metadata counts not raw prompts', () => {
+    runCli(['init', '-d', tempDir]);
+    const codexDir = join(FIXTURES_DIR, 'codex');
+    const result = runCli(['import', '-d', tempDir, '--tool', 'codex', '--source', codexDir, '--verbose']);
+    expect(result.stdout).toMatch(/\[verbose\]/);
+    expect(result.stdout).not.toContain('CANARY_LEAK_TEST_MARKER');
+  });
+});
+
+// ─── Explicit --source without --tool (integration tests) ───
+
+describe('Explicit --source without --tool (integration)', () => {
+  let tempDir: string;
+  beforeEach(() => { tempDir = mkdtempSync(join(tmpdir(), 'cet-source-explicit-')); });
+  afterEach(() => { safeCleanup(tempDir); });
+
+  function runCli(args: string[]): { stdout: string; stderr: string; exitCode: number } {
+    const cliPath = join(process.cwd(), 'bin', 'cli.js');
+    try {
+      const stdout = execFileSync('node', [cliPath, ...args], { encoding: 'utf-8', timeout: 15000 });
+      return { stdout: stdout.trim(), stderr: '', exitCode: 0 };
+    } catch (err: unknown) {
+      const e = err as { stdout?: string; stderr?: string; status?: number };
+      return { stdout: (e.stdout ?? '').trim(), stderr: (e.stderr ?? '').trim(), exitCode: e.status ?? 1 };
+    }
+  }
+
+  it('explicit --source with valid codex fixture dir succeeds', () => {
+    runCli(['init', '-d', tempDir]);
+    const result = runCli(['import', '-d', tempDir, '--source', join(FIXTURES_DIR, 'codex')]);
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toMatch(/session/i);
+  });
+
+  it('explicit --source with valid fixture dir writes to DB', () => {
+    runCli(['init', '-d', tempDir]);
+    runCli(['import', '-d', tempDir, '--source', join(FIXTURES_DIR, 'codex')]);
+    const db = new Database(join(tempDir, 'tracker.db'), { readonly: true });
+    try {
+      expect((db.prepare('SELECT count(*) as cnt FROM sessions').get() as { cnt: number }).cnt).toBeGreaterThanOrEqual(2);
+    } finally { db.close(); }
+  });
+
+  it('explicit --source with path containing spaces works for valid fixture', () => {
+    runCli(['init', '-d', tempDir]);
+    const spacedDir = join(tempDir, 'my codex data');
+    mkdirSync(spacedDir, { recursive: true });
+    const srcFile = join(FIXTURES_DIR, 'codex', 'sessions.jsonl');
+    const dstFile = join(spacedDir, 'sessions.jsonl');
+    copyFileSync(srcFile, dstFile);
+    const result = runCli(['import', '-d', tempDir, '--tool', 'codex', '--source', spacedDir]);
+    expect(result.exitCode).toBe(0);
+  });
+});

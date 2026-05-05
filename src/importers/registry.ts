@@ -201,7 +201,7 @@ export function runImport(
  */
 export function runFixtureImport(
   fixturePath: string,
-  storage: Storage,
+  storage?: Storage,
 ): ImportResult {
   if (!existsSync(fixturePath)) {
     return {
@@ -339,3 +339,4 @@ export function registerAllImporters(): void {
   registerImporter(new FactoryDroidImporter());
   registerImporter(new CursorImporter());
 }
+

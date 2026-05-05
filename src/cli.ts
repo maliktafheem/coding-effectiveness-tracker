@@ -31,6 +31,8 @@ program
   .option('-t, --tool <id>', 'Tool id to import (codex, opencode, claude-code, cursor, factory-droid)')
   .option('-f, --fixture <path>', 'Import from a fixture JSON file')
   .option('--dry-run', 'Preview import without writing to database', false)
+  .option('--discover', 'Scan default AI tool directories for importable data (requires explicit opt-in)')
+  .option('--verbose', 'Enable verbose/debug output (privacy-safe: secrets and prompts are redacted)', false)
   .action(handleImport);
 
 program
