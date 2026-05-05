@@ -1,0 +1,48 @@
+{
+  "name": "coding-effectiveness-tracker",
+  "version": "0.1.0",
+  "description": "Local-first coding effectiveness tracker for AI-assisted development",
+  "type": "module",
+  "bin": {
+    "cet": "./bin/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src tests --ext .ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "dev": "tsx src/cli.ts"
+  },
+  "keywords": [
+    "coding",
+    "effectiveness",
+    "tracker",
+    "ai",
+    "local-first"
+  ],
+  "author": "",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "files": [
+    "dist",
+    "bin",
+    "README.md"
+  ],
+  "dependencies": {
+    "better-sqlite3": "^12.9.0",
+    "commander": "^14.0.3"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^25.6.0",
+    "eslint": "^10.3.0",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.59.2",
+    "vitest": "^4.1.5"
+  }
+}
