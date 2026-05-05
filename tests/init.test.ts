@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, rmSync, existsSync } from 'node:fs';
+import { mkdtempSync, rmSync, existsSync, writeFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import Database from 'better-sqlite3';
@@ -174,5 +174,80 @@ describe('CLI init command', () => {
     const result = runCli(['init', '-d', unicodePath]);
     expect(result.exitCode).toBe(0);
     expect(existsSync(join(unicodePath, 'tracker.db'))).toBe(true);
+  });
+
+  // VAL-CLI-040: init without --force short-circuits on file existence (does not open DB)
+  it('refuses re-init on existing corrupt DB without --force', () => {
+    const corruptDir = join(tempDir, 'corrupt-data');
+    runCli(['init', '-d', corruptDir]);
+    writeFileSync(join(corruptDir, 'tracker.db'), 'this is not a valid sqlite database');
+
+    const result = runCli(['init', '-d', corruptDir]);
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('Already initialized');
+    expect(result.stdout).toContain('--force');
+    expect(existsSync(join(corruptDir, 'tracker.db'))).toBe(true);
+  });
+
+  // Corruption recovery with --force: non-SQLite tracker.db
+  it('recovers from corrupt non-SQLite tracker.db with --force', () => {
+    const corruptDir = join(tempDir, 'corrupt-force');
+    runCli(['init', '-d', corruptDir]);
+    writeFileSync(join(corruptDir, 'tracker.db'), 'this is not a valid sqlite database');
+    expect(existsSync(join(corruptDir, 'tracker.db'))).toBe(true);
+
+    const result = runCli(['init', '-d', corruptDir, '--force']);
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('Moved corrupt database');
+    expect(result.stdout).toContain('Initialized workspace');
+
+    const dbPath = join(corruptDir, 'tracker.db');
+    expect(existsSync(dbPath)).toBe(true);
+    const db = new Database(dbPath, { readonly: true });
+    try {
+      const check = db.pragma('integrity_check', { simple: true }) as string;
+      expect(check).toBe('ok');
+      const tools = db.prepare('SELECT name FROM tools').all() as { name: string }[];
+      expect(tools.length).toBeGreaterThanOrEqual(5);
+    } finally {
+      db.close();
+    }
+
+    const backupFiles = readdirSync(corruptDir).filter((f) => f.startsWith('tracker.db.corrupt.'));
+    expect(backupFiles.length).toBe(1);
+  });
+
+  // Zero-byte tracker.db opens as valid empty SQLite, so --force reinitializes without moving
+  it('handles zero-byte tracker.db with --force without error', () => {
+    const corruptDir = join(tempDir, 'corrupt-zero');
+    runCli(['init', '-d', corruptDir]);
+    writeFileSync(join(corruptDir, 'tracker.db'), '');
+
+    const result = runCli(['init', '-d', corruptDir, '--force']);
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('Initialized workspace');
+
+    const dbPath = join(corruptDir, 'tracker.db');
+    expect(existsSync(dbPath)).toBe(true);
+    const db = new Database(dbPath, { readonly: true });
+    try {
+      const check = db.pragma('integrity_check', { simple: true }) as string;
+      expect(check).toBe('ok');
+    } finally {
+      db.close();
+    }
+  });
+
+  // Privacy evidence: default CLI output does not emit raw secrets
+  it('does not emit sensitive data in default CLI output', () => {
+    const result = runCli(['init', '-d', dataDir]);
+    expect(result.exitCode).toBe(0);
+    const combined = result.stdout + result.stderr;
+    expect(combined).not.toMatch(/password/i);
+    expect(combined).not.toMatch(/secret/i);
+    expect(combined).not.toMatch(/token/i);
+    expect(combined).not.toMatch(/api[_-]?key/i);
+    expect(result.stdout.toLowerCase()).toContain('privacy');
+    expect(result.stdout.toLowerCase()).toContain('local');
   });
 });
