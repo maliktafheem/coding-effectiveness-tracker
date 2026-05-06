@@ -695,3 +695,182 @@ describe('CLI annotate command', () => {
   });
 });
 
+
+// --- Regression: Missing-input denominator behavior ---
+
+describe('Regression: missing-input denominator behavior', () => {
+  let tempDir;
+  let storage;
+
+  beforeEach(() => {
+    tempDir = mkdtempSync(join(tmpdir(), 'cet-missing-input-'));
+    storage = createTestStorage(tempDir);
+    registerAllImporters();
+    runFixtureImport(join(FIXTURES_DIR, 'correlation-sessions.json'), storage);
+  });
+  afterEach(() => { storage?.close(); safeCleanup(tempDir); });
+
+  it('excludes unavailable dimensions from weighted denominator', () => {
+    // No git signals, no test outcomes, no manual outcomes
+    // Only activity (available) and rework (available) contribute
+    const score = computeEffectivenessScore(storage, { projectId: 'project-alpha' });
+
+    // 5 project-alpha sessions: activity = min(5/10,1) = 0.5
+    // rework: sessions 001(rework=0), 002(rework=1), 003(no key), 006(no key), 007(rework=3)
+    // sessionsWithRework = 2 (002, 007), reworkRatio = 2/5 = 0.4, score = 0.6
+    //
+    // If zeros-included (buggy): (0.5*0.15 + 0*0.25 + 0*0.25 + 0*0.15 + 0*0.10 + 0.6*0.10) / 1.0 = 0.135
+    // If zeros-excluded (fixed): (0.5*0.15 + 0.6*0.10) / (0.15 + 0.10) = 0.135 / 0.25 = 0.54
+    // The aggregate should be much higher when unavailable dims are excluded
+    expect(score.aggregate).toBeGreaterThan(0.4);
+    expect(score.missingInputs.length).toBeGreaterThan(0);
+  });
+
+  it('does not include unavailable git dimension in denominator', () => {
+    const score = computeEffectivenessScore(storage, { projectId: 'project-alpha' });
+    const gitDim = score.dimensions.find(d => d.name === 'git-correlation');
+    expect(gitDim).toBeDefined();
+    expect(gitDim.available).toBe(false);
+    expect(gitDim.value).toBe(0);
+  });
+
+  it('does not include unavailable test dimension in denominator', () => {
+    const score = computeEffectivenessScore(storage, { projectId: 'project-alpha' });
+    const testDim = score.dimensions.find(d => d.name === 'test-confidence');
+    expect(testDim).toBeDefined();
+    expect(testDim.available).toBe(false);
+  });
+
+  it('does not include unavailable manual dimension in denominator', () => {
+    const score = computeEffectivenessScore(storage, { projectId: 'project-alpha' });
+    const manualDim = score.dimensions.find(d => d.name === 'manual-outcome');
+    expect(manualDim).toBeDefined();
+    expect(manualDim.available).toBe(false);
+  });
+
+  it('score explanation still lists all missing inputs clearly', () => {
+    const score = computeEffectivenessScore(storage, { projectId: 'project-alpha' });
+    expect(score.missingInputs.some(m => /test/i.test(m))).toBe(true);
+    expect(score.missingInputs.some(m => /manual/i.test(m))).toBe(true);
+    expect(score.missingInputs.some(m => /git/i.test(m))).toBe(true);
+  });
+
+  it('when all dimensions available, aggregate uses full weight denominator', () => {
+    const tempDir2 = mkdtempSync(join(tmpdir(), 'cet-missing-full-'));
+    try {
+      const repoDir = createTempGitRepo(tempDir2);
+      storeGitSignals(storage, collectGitSignals(repoDir), 'project-alpha');
+      collectTestOutcomes(storage, [
+        { command: 'npm test', passed: 10, failed: 0, skipped: 0, durationMs: 1000, runAt: '2026-04-28T09:30:00Z' },
+      ], 'project-alpha');
+      const db = storage.db;
+      const sessions = db.prepare("SELECT id FROM sessions WHERE project_id = 'project-alpha'").all();
+      for (let i = 0; i < sessions.length; i++) {
+        db.prepare("INSERT INTO outcomes (id, session_id, outcome_type, score, label) VALUES (?, ?, ?, ?, ?)").run(
+          'reg-outcome-' + i, sessions[i].id, 'manual', 0.9, 'good'
+        );
+      }
+      for (const s of sessions) correlateSession(storage, s.id);
+      const score = computeEffectivenessScore(storage, { projectId: 'project-alpha' });
+      expect(score.missingInputs.length).toBe(0);
+      expect(score.aggregate).toBeGreaterThan(0);
+      // All dimensions available, so full 1.0 weight denominator
+      for (const dim of score.dimensions) {
+        expect(dim.available).toBe(true);
+      }
+    } finally {
+      safeCleanup(tempDir2);
+    }
+  });
+});
+
+// --- Regression: filtered report test-confidence scope ---
+
+describe('Regression: filtered report test-confidence scope', () => {
+  let tempDir;
+  let storage;
+
+  beforeEach(() => {
+    tempDir = mkdtempSync(join(tmpdir(), 'cet-filtered-test-'));
+    storage = createTestStorage(tempDir);
+    registerAllImporters();
+    runFixtureImport(join(FIXTURES_DIR, 'correlation-sessions.json'), storage);
+  });
+  afterEach(() => { storage?.close(); safeCleanup(tempDir); });
+
+  it('tool filter constrains test outcomes considered for test-confidence', () => {
+    // Add passing tests for project-alpha, failing for project-beta
+    collectTestOutcomes(storage, [
+      { command: 'npm test', passed: 20, failed: 0, skipped: 0, durationMs: 2000, runAt: '2026-04-28T09:20:00Z' },
+    ], 'project-alpha');
+    collectTestOutcomes(storage, [
+      { command: 'pytest', passed: 5, failed: 10, skipped: 0, durationMs: 3000, runAt: '2026-04-28T16:40:00Z' },
+    ], 'project-beta');
+
+    // codex sessions are in project-alpha, opencode in project-beta
+    const codexScore = computeEffectivenessScore(storage, { toolId: 'codex' });
+    const codexTestDim = codexScore.dimensions.find(d => d.name === 'test-confidence');
+
+    const opencodeScore = computeEffectivenessScore(storage, { toolId: 'opencode' });
+    const opencodeTestDim = opencodeScore.dimensions.find(d => d.name === 'test-confidence');
+
+    // codex test-confidence should reflect project-alpha pass rate (20/20 = 100%)
+    // opencode should reflect project-beta (5/15 = 33%)
+    expect(codexTestDim.value).toBeGreaterThan(opencodeTestDim.value);
+  });
+
+  it('date filter constrains test outcomes for test-confidence', () => {
+    collectTestOutcomes(storage, [
+      { command: 'npm test', passed: 20, failed: 0, skipped: 0, durationMs: 2000, runAt: '2026-04-28T09:20:00Z' },
+    ], 'project-alpha');
+    collectTestOutcomes(storage, [
+      { command: 'npm test', passed: 2, failed: 8, skipped: 0, durationMs: 3000, runAt: '2026-04-29T14:20:00Z' },
+    ], 'project-alpha');
+
+    const day1Score = computeEffectivenessScore(storage, { projectId: 'project-alpha', from: '2026-04-28', to: '2026-04-28' });
+    const day1TestDim = day1Score.dimensions.find(d => d.name === 'test-confidence');
+
+    const day2Score = computeEffectivenessScore(storage, { projectId: 'project-alpha', from: '2026-04-29', to: '2026-04-29' });
+    const day2TestDim = day2Score.dimensions.find(d => d.name === 'test-confidence');
+
+    // Day 1: 100% pass, Day 2: 20% pass
+    expect(day1TestDim.value).toBeGreaterThan(day2TestDim.value);
+  });
+
+  it('unrelated tests outside filtered scope do not affect report', () => {
+    collectTestOutcomes(storage, [
+      { command: 'pytest', passed: 0, failed: 50, skipped: 0, durationMs: 5000, runAt: '2026-04-28T16:40:00Z' },
+    ], 'project-beta');
+    collectTestOutcomes(storage, [
+      { command: 'npm test', passed: 100, failed: 0, skipped: 0, durationMs: 2000, runAt: '2026-04-28T09:20:00Z' },
+    ], 'project-alpha');
+
+    const alphaScore = computeEffectivenessScore(storage, { projectId: 'project-alpha' });
+    const alphaTestDim = alphaScore.dimensions.find(d => d.name === 'test-confidence');
+
+    const betaScore = computeEffectivenessScore(storage, { projectId: 'project-beta' });
+    const betaTestDim = betaScore.dimensions.find(d => d.name === 'test-confidence');
+
+    // Alpha should show high test-confidence (100% pass rate)
+    // Beta should show low test-confidence (0% pass rate)
+    expect(alphaTestDim.value).toBeGreaterThan(betaTestDim.value);
+    expect(betaTestDim.value).toBeLessThan(0.3);
+  });
+
+  it('filtered report JSON test-confidence reflects only filtered scope', () => {
+    collectTestOutcomes(storage, [
+      { command: 'npm test', passed: 15, failed: 0, skipped: 0, durationMs: 1500, runAt: '2026-04-28T09:30:00Z' },
+    ], 'project-alpha');
+    collectTestOutcomes(storage, [
+      { command: 'jest', passed: 0, failed: 30, skipped: 0, durationMs: 4000, runAt: '2026-04-28T16:50:00Z' },
+    ], 'project-beta');
+
+    const alphaScore = computeEffectivenessScore(storage, { projectId: 'project-alpha' });
+    const betaScore = computeEffectivenessScore(storage, { projectId: 'project-beta' });
+    const alphaTestDim = alphaScore.dimensions.find(d => d.name === 'test-confidence');
+    const betaTestDim = betaScore.dimensions.find(d => d.name === 'test-confidence');
+
+    expect(alphaTestDim.value).toBeGreaterThan(0.5);
+    expect(betaTestDim.value).toBeLessThan(0.3);
+  });
+});
