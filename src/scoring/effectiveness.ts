@@ -177,6 +177,20 @@ function computeTestDimension(
   sessions: Record<string, unknown>[],
   options: ScoreOptions,
 ): ScoreDimension {
+  // When a --tool filter is active, test-confidence must be scoped to only
+  // those sessions. If no sessions match the tool filter, or matching sessions
+  // all lack a reliable project_id, test-confidence is unavailable rather than
+  // falling back to unrelated global test outcomes.
+  if (options.toolId && sessions.length === 0) {
+    return {
+      name: 'test-confidence',
+      value: 0,
+      weight: 0.25,
+      explanation: 'No sessions matched the tool filter - test confidence not available.',
+      available: false,
+    };
+  }
+
   // Build filtered test_outcomes query that respects all active filters.
   // When no explicit projectId filter is set but a toolId filter is active,
   // derive the project scope from the filtered sessions so that test outcomes
@@ -189,12 +203,19 @@ function computeTestDimension(
     conditions.push('project_id = ?');
     params.push(options.projectId);
   } else if (options.toolId && sessions.length > 0) {
-    // Derive project scope from the filtered sessions
+    // Derive project scope from the filtered sessions.
+    // Filter out null/empty project_ids to avoid unreliable scoping.
     const projectIds = [...new Set(sessions.map(s => s.project_id as string).filter(Boolean))];
     if (projectIds.length > 0) {
       const placeholders = projectIds.map(() => '?').join(', ');
       conditions.push('project_id IN (' + placeholders + ')');
       params.push(...projectIds);
+    } else {
+      // All matching sessions have null/empty project_id.
+      // We cannot reliably scope test outcomes, so use an impossible
+      // condition to return zero results instead of falling back to
+      // unrelated global test outcomes.
+      conditions.push('1 = 0');
     }
   }
   if (options.from) {

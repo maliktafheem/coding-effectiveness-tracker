@@ -874,3 +874,77 @@ describe('Regression: filtered report test-confidence scope', () => {
     expect(betaTestDim.value).toBeLessThan(0.3);
   });
 });
+
+// --- Regression: --tool filter edge cases (fix-test-confidence-filter-edge-cases) ---
+
+describe('Regression: --tool filter edge cases for test-confidence', () => {
+  let tempDir;
+  let storage;
+
+  beforeEach(() => {
+    tempDir = mkdtempSync(join(tmpdir(), 'cet-tool-edge-'));
+    storage = createTestStorage(tempDir);
+    registerAllImporters();
+    runFixtureImport(join(FIXTURES_DIR, 'correlation-sessions.json'), storage);
+  });
+  afterEach(() => { storage?.close(); safeCleanup(tempDir); });
+
+  it('tool filter with no matching sessions does not use unrelated test outcomes', () => {
+    collectTestOutcomes(storage, [
+      { command: 'npm test', passed: 100, failed: 0, skipped: 0, durationMs: 2000, runAt: '2026-04-28T09:20:00Z' },
+    ], 'project-alpha');
+
+    const score = computeEffectivenessScore(storage, { toolId: 'nonexistent-tool' });
+    expect(score.sessionCount).toBe(0);
+
+    const testDim = score.dimensions.find(d => d.name === 'test-confidence');
+    expect(testDim.available).toBe(false);
+    expect(testDim.explanation).toMatch(/no test|not available|no sessions/i);
+  });
+
+  it('tool filter with matching sessions lacking project_id does not use unrelated global tests', () => {
+    const db = storage.db;
+    db.prepare('INSERT INTO tools (id, name, display_name) VALUES (?, ?, ?)').run(
+      'null-project-tool', 'null-project-tool', 'Null Project Tool'
+    );
+    db.prepare('INSERT INTO sessions (id, external_id, source_tool_id, project_id, started_at, ended_at, duration_ms, summary) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
+      'null-proj-sess-1', 'null-proj-ext-1', 'null-project-tool', null,
+      '2026-04-28T10:00:00Z', '2026-04-28T11:00:00Z', 3600000, 'Session without project'
+    );
+
+    collectTestOutcomes(storage, [
+      { command: 'npm test', passed: 0, failed: 100, skipped: 0, durationMs: 2000, runAt: '2026-04-28T09:20:00Z' },
+    ], 'project-alpha');
+
+    const score = computeEffectivenessScore(storage, { toolId: 'null-project-tool' });
+    expect(score.sessionCount).toBe(1);
+
+    const testDim = score.dimensions.find(d => d.name === 'test-confidence');
+    expect(testDim.available).toBe(false);
+    expect(testDim.explanation).toMatch(/no test|not available|no sessions|scope/i);
+  });
+
+  it('tool filter with sessions having empty string project_id does not use unrelated global tests', () => {
+    const db = storage.db;
+    db.prepare('INSERT INTO tools (id, name, display_name) VALUES (?, ?, ?)').run(
+      'empty-proj-tool', 'empty-proj-tool', 'Empty Proj Tool'
+    );
+    // Empty string project_id exists as a project but has no test outcomes.
+    // Sessions with empty project_id must not trigger a global (unfiltered) test_outcomes query.
+    db.prepare('INSERT OR IGNORE INTO projects (id, name) VALUES (?, ?)').run('', 'No Project');
+    db.prepare('INSERT INTO sessions (id, external_id, source_tool_id, project_id, started_at, ended_at, duration_ms, summary) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
+      'empty-proj-sess-1', 'empty-proj-ext-1', 'empty-proj-tool', '',
+      '2026-04-28T10:00:00Z', '2026-04-28T11:00:00Z', 3600000, 'Session with empty project'
+    );
+
+    collectTestOutcomes(storage, [
+      { command: 'npm test', passed: 0, failed: 50, skipped: 0, durationMs: 2000, runAt: '2026-04-28T09:20:00Z' },
+    ], 'project-alpha');
+
+    const score = computeEffectivenessScore(storage, { toolId: 'empty-proj-tool' });
+    expect(score.sessionCount).toBe(1);
+
+    const testDim = score.dimensions.find(d => d.name === 'test-confidence');
+    expect(testDim.available).toBe(false);
+  });
+});
