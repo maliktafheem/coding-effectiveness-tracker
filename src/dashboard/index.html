@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Coding Effectiveness Tracker</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f172a; color: #e2e8f0; line-height: 1.6; }
+    a { color: #60a5fa; text-decoration: none; }
+    .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+    .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+    .header h1 { font-size: 1.5rem; color: #f8fafc; }
+    .nav { display: flex; gap: 12px; }
+    .nav a { padding: 8px 16px; border-radius: 6px; background: #1e293b; color: #94a3b8; font-size: 0.875rem; transition: all 0.2s; }
+    .nav a:hover, .nav a.active { background: #334155; color: #f8fafc; }
+    .card { background: #1e293b; border-radius: 8px; padding: 20px; margin-bottom: 16px; }
+    .card h2 { font-size: 1.1rem; margin-bottom: 12px; color: #f1f5f9; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px; margin-bottom: 24px; }
+    .stat { text-align: center; }
+    .stat .value { font-size: 2rem; font-weight: 700; color: #60a5fa; }
+    .stat .label { font-size: 0.8rem; color: #94a3b8; text-transform: uppercase; }
+    .score-bar { height: 8px; background: #334155; border-radius: 4px; margin: 8px 0; }
+    .score-fill { height: 100%; border-radius: 4px; transition: width 0.5s; }
+    .loading { text-align: center; padding: 40px; color: #94a3b8; }
+    .empty { text-align: center; padding: 40px; color: #94a3b8; }
+    .empty h2 { color: #60a5fa; margin-bottom: 12px; }
+    .error { background: #451a1a; border: 1px solid #7f1d1d; border-radius: 8px; padding: 16px; color: #fca5a5; }
+    .error h2 { color: #f87171; margin-bottom: 8px; }
+    .btn { padding: 8px 16px; border-radius: 6px; border: none; cursor: pointer; font-size: 0.875rem; }
+    .btn-primary { background: #3b82f6; color: white; }
+    .btn-secondary { background: #334155; color: #e2e8f0; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid #334155; }
+    th { color: #94a3b8; font-size: 0.8rem; text-transform: uppercase; }
+    .tag { display: inline-block; padding: 2px 8px; border-radius: 4px; background: #334155; color: #94a3b8; font-size: 0.75rem; margin-right: 4px; }
+    .filter-bar { display: flex; gap: 12px; margin-bottom: 16px; align-items: center; }
+    .filter-bar select, .filter-bar input { padding: 6px 12px; border-radius: 6px; border: 1px solid #334155; background: #0f172a; color: #e2e8f0; font-size: 0.875rem; }
+    .correlation-badge { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; }
+    .correlation-badge.high { background: #166534; color: #86efac; }
+    .correlation-badge.medium { background: #854d0e; color: #fde68a; }
+    .correlation-badge.low { background: #7f1d1d; color: #fca5a5; }
+    .export-btn { position: fixed; bottom: 20px; right: 20px; z-index: 100; }
+    .annotation-form { display: flex; flex-direction: column; gap: 8px; }
+    .annotation-form select, .annotation-form input, .annotation-form textarea { padding: 8px; border-radius: 6px; border: 1px solid #334155; background: #0f172a; color: #e2e8f0; }
+    .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #166534; color: #86efac; padding: 12px 24px; border-radius: 8px; z-index: 200; animation: fadeIn 0.3s; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateX(-50%) translateY(10px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="module" src="./main.tsx"></script>
+</body>
+</html>

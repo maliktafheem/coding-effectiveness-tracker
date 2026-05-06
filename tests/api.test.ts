@@ -1,0 +1,470 @@
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { mkdtempSync, rmSync, writeFileSync, mkdirSync, existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import Database from 'better-sqlite3';
+import { execFileSync } from 'node:child_process';
+import { createApiServer } from '../src/api/server.js';
+
+function seedFixtures(dbPath: string): void {
+  const db = new Database(dbPath);
+  db.exec(`
+    INSERT OR IGNORE INTO projects (id, name) VALUES ('proj1', 'Project Alpha');
+    INSERT OR IGNORE INTO tools (id, name, display_name) VALUES ('codex', 'codex', 'Codex');
+    INSERT OR IGNORE INTO tools (id, name, display_name) VALUES ('claude-code', 'claude-code', 'Claude Code');
+    INSERT INTO sessions (id, source_tool_id, project_id, external_id, started_at, ended_at, duration_ms, summary, model, tokens_input, tokens_output, cost_estimate, metadata_json)
+    VALUES ('sess1', 'codex', 'proj1', 'ext-1', '2025-01-15T10:00:00Z', '2025-01-15T11:00:00Z', 3600000, 'Implemented auth module', 'gpt-4', 5000, 2000, 0.15, '{"reworkCount":1}'),
+           ('sess2', 'claude-code', 'proj1', 'ext-2', '2025-01-16T14:00:00Z', '2025-01-16T15:30:00Z', 5400000, 'Fixed database migration', 'claude-3', 3000, 1500, 0.08, null),
+           ('sess3', 'codex', 'proj1', 'ext-3', '2025-01-17T09:00:00Z', '2025-01-17T09:45:00Z', 2700000, 'Added unit tests', 'gpt-4', 2000, 1000, 0.05, null);
+    INSERT INTO outcomes (id, session_id, outcome_type, score, label, note) VALUES ('out1', 'sess1', 'manual', 0.8, 'good', 'Auth shipped');
+    INSERT INTO git_commits (id, hash, short_hash, message, author, authored_at, branch, project_id) VALUES ('gc1', 'abc123def456', 'abc123d', 'feat: add auth', 'dev', '2025-01-15T10:30:00Z', 'main', 'proj1');
+    INSERT INTO correlations (id, session_id, correlation_type, target_id, confidence, metadata_json) VALUES ('corr1', 'sess1', 'git-commit', 'gc1', 0.85, '{"reasons":["time overlap","same project"]}');
+    INSERT INTO test_outcomes (id, project_id, session_id, commit_id, command, passed, failed, skipped, duration_ms, run_at) VALUES ('to1', 'proj1', 'sess1', 'gc1', 'npm test', 42, 0, 2, 15000, '2025-01-15T11:15:00Z');
+  `);
+  db.close();
+}
+
+function runCli(args: string[]): { stdout: string; stderr: string; exitCode: number } {
+  const cliPath = join(process.cwd(), 'bin', 'cli.js');
+  try {
+    const stdout = execFileSync('node', [cliPath, ...args], { encoding: 'utf-8', env: { ...process.env }, timeout: 15000 });
+    return { stdout: stdout.trim(), stderr: '', exitCode: 0 };
+  } catch (err: unknown) {
+    const e = err as { stdout?: string; stderr?: string; status?: number };
+    return { stdout: (e.stdout ?? '').trim(), stderr: (e.stderr ?? '').trim(), exitCode: e.status ?? 1 };
+  }
+}
+
+const PORT = 43199;
+
+describe('API Server', () => {
+  let tempDir: string;
+  let dataDir: string;
+  let server: Awaited<ReturnType<typeof createApiServer>> | null = null;
+
+  beforeEach(() => {
+    tempDir = mkdtempSync(join(tmpdir(), 'cet-api-test-'));
+    dataDir = join(tempDir, 'tracker-data');
+    mkdirSync(dataDir, { recursive: true });
+    mkdirSync(join(dataDir, 'exports'), { recursive: true });
+    mkdirSync(join(dataDir, 'importers'), { recursive: true });
+    mkdirSync(join(dataDir, 'correlations'), { recursive: true });
+  });
+
+  afterEach(async () => {
+    if (server) { try { await server.close(); } catch { /* ignore */ } server = null; }
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('creates server bound to 127.0.0.1 only', async () => {
+    const { Storage } = await import('../src/storage.js');
+    const s = Storage.open({ dataDir });
+    s.close();
+    server = await createApiServer({ dataDir, port: PORT });
+    await server.listen();
+    const addr = server.address();
+    expect(addr).toBeTruthy();
+    if (typeof addr === 'object' && addr) {
+      expect(addr.address).toBe('127.0.0.1');
+      expect(addr.port).toBe(PORT);
+    }
+    await server.close();
+    server = null;
+  });
+
+  describe('GET /health', () => {
+    it('returns ok status', async () => {
+      const { Storage } = await import('../src/storage.js');
+      const s = Storage.open({ dataDir });
+      s.close();
+      server = await createApiServer({ dataDir, port: PORT });
+      const res = await server.inject({ method: 'GET', url: '/health' });
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.payload);
+      expect(body.status).toBe('ok');
+    });
+  });
+
+  describe('GET /api/overview', () => {
+    it('returns overview data with seeded sessions', async () => {
+      const { Storage } = await import('../src/storage.js');
+      const s = Storage.open({ dataDir });
+      seedFixtures(s.dbPath);
+      s.close();
+      server = await createApiServer({ dataDir, port: PORT });
+      const res = await server.inject({ method: 'GET', url: '/api/overview' });
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.payload);
+      expect(body.totalSessions).toBe(3);
+      expect(body.tools).toContain('codex');
+      expect(body.tools).toContain('claude-code');
+      expect(body.score).toBeDefined();
+      expect(body.score.aggregate).toBeGreaterThanOrEqual(0);
+      expect(body.outcomeCount).toBeGreaterThanOrEqual(1);
+    });
+
+    it('returns empty state with guidance when no sessions', async () => {
+      const { Storage } = await import('../src/storage.js');
+      const s = Storage.open({ dataDir });
+      s.close();
+      server = await createApiServer({ dataDir, port: PORT });
+      const res = await server.inject({ method: 'GET', url: '/api/overview' });
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.payload);
+      expect(body.totalSessions).toBe(0);
+      expect(body.empty).toBe(true);
+      expect(body.message).toBeDefined();
+    });
+  });
+
+  describe('GET /api/timeline', () => {
+    it('returns sessions in chronological order', async () => {
+      const { Storage } = await import('../src/storage.js');
+      const s = Storage.open({ dataDir });
+      seedFixtures(s.dbPath);
+      s.close();
+      server = await createApiServer({ dataDir, port: PORT });
+      const res = await server.inject({ method: 'GET', url: '/api/timeline' });
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.payload);
+      expect(body.sessions.length).toBe(3);
+      const times = body.sessions.map((s: any) => new Date(s.startedAt).getTime());
+      for (let i = 1; i < times.length; i++) {
+        expect(times[i]).toBeGreaterThanOrEqual(times[i - 1]);
+      }
+    });
+
+    it('filters by tool', async () => {
+      const { Storage } = await import('../src/storage.js');
+      const s = Storage.open({ dataDir });
+      seedFixtures(s.dbPath);
+      s.close();
+      server = await createApiServer({ dataDir, port: PORT });
+      const res = await server.inject({ method: 'GET', url: '/api/timeline?tool=codex' });
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.payload);
+      expect(body.sessions.length).toBe(2);
+      expect(body.sessions.every((s: any) => s.sourceToolId === 'codex')).toBe(true);
+    });
+
+    it('filters by date range', async () => {
+      const { Storage } = await import('../src/storage.js');
+      const s = Storage.open({ dataDir });
+      seedFixtures(s.dbPath);
+      s.close();
+      server = await createApiServer({ dataDir, port: PORT });
+      const res = await server.inject({ method: 'GET', url: '/api/timeline?from=2025-01-16&to=2025-01-17' });
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.payload);
+      expect(body.sessions.length).toBe(2);
+    });
+  });
+
+  describe('GET /api/tools', () => {
+    it('returns per-tool comparison data', async () => {
+      const { Storage } = await import('../src/storage.js');
+      const s = Storage.open({ dataDir });
+      seedFixtures(s.dbPath);
+      s.close();
+      server = await createApiServer({ dataDir, port: PORT });
+      const res = await server.inject({ method: 'GET', url: '/api/tools' });
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.payload);
+      expect(body.tools.length).toBe(2);
+      const codex = body.tools.find((t: any) => t.toolId === 'codex');
+      expect(codex).toBeDefined();
+      expect(codex.sessionCount).toBe(2);
+    });
+  });
+
+  describe('GET /api/sessions/:id', () => {
+    it('returns session details with correlations and outcomes', async () => {
+      const { Storage } = await import('../src/storage.js');
+      const s = Storage.open({ dataDir });
+      seedFixtures(s.dbPath);
+      s.close();
+      server = await createApiServer({ dataDir, port: PORT });
+      const res = await server.inject({ method: 'GET', url: '/api/sessions/sess1' });
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.payload);
+      expect(body.id).toBe('sess1');
+      expect(body.correlations.length).toBe(1);
+      expect(body.correlations[0].type).toBe('git-commit');
+      expect(body.outcomes.length).toBe(1);
+    });
+
+    it('returns empty correlations for uncorrelated session', async () => {
+      const { Storage } = await import('../src/storage.js');
+      const s = Storage.open({ dataDir });
+      seedFixtures(s.dbPath);
+      s.close();
+      server = await createApiServer({ dataDir, port: PORT });
+      const res = await server.inject({ method: 'GET', url: '/api/sessions/sess2' });
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.payload);
+      expect(body.correlations.length).toBe(0);
+      expect(body.uncorrelated).toBe(true);
+    });
+
+    it('returns 404 for nonexistent session', async () => {
+      const { Storage } = await import('../src/storage.js');
+      const s = Storage.open({ dataDir });
+      s.close();
+      server = await createApiServer({ dataDir, port: PORT });
+      const res = await server.inject({ method: 'GET', url: '/api/sessions/nonexistent' });
+      expect(res.statusCode).toBe(404);
+    });
+  });
+
+  describe('POST /api/sessions/:id/annotations', () => {
+    it('creates annotation and returns it', async () => {
+      const { Storage } = await import('../src/storage.js');
+      const s = Storage.open({ dataDir });
+      seedFixtures(s.dbPath);
+      s.close();
+      server = await createApiServer({ dataDir, port: PORT });
+      const res = await server.inject({
+        method: 'POST', url: '/api/sessions/sess2/annotations',
+        payload: { outcome: 'good', score: 0.9, note: 'Great work' },
+        headers: { 'content-type': 'application/json' },
+      });
+      expect(res.statusCode).toBe(201);
+      const body = JSON.parse(res.payload);
+      expect(body.sessionId).toBe('sess2');
+      expect(body.outcome).toBe('good');
+      expect(body.score).toBe(0.9);
+    });
+
+    it('rejects invalid annotation', async () => {
+      const { Storage } = await import('../src/storage.js');
+      const s = Storage.open({ dataDir });
+      seedFixtures(s.dbPath);
+      s.close();
+      server = await createApiServer({ dataDir, port: PORT });
+      const res = await server.inject({
+        method: 'POST', url: '/api/sessions/sess2/annotations',
+        payload: { outcome: '' },
+        headers: { 'content-type': 'application/json' },
+      });
+      expect(res.statusCode).toBe(400);
+    });
+
+    it('rejects annotation for nonexistent session', async () => {
+      const { Storage } = await import('../src/storage.js');
+      const s = Storage.open({ dataDir });
+      s.close();
+      server = await createApiServer({ dataDir, port: PORT });
+      const res = await server.inject({
+        method: 'POST', url: '/api/sessions/nonexistent/annotations',
+        payload: { outcome: 'good' },
+        headers: { 'content-type': 'application/json' },
+      });
+      expect(res.statusCode).toBe(404);
+    });
+  });
+
+  describe('PATCH /api/annotations/:id', () => {
+    it('updates existing annotation', async () => {
+      const { Storage } = await import('../src/storage.js');
+      const s = Storage.open({ dataDir });
+      seedFixtures(s.dbPath);
+      s.db.prepare("INSERT INTO outcomes (id, session_id, outcome_type, score, label, note, tags_json) VALUES ('ann1', 'sess2', 'manual', 0.5, 'ok', 'initial', null)").run();
+      s.close();
+      server = await createApiServer({ dataDir, port: PORT });
+      const res = await server.inject({
+        method: 'PATCH', url: '/api/annotations/ann1',
+        payload: { outcome: 'good', score: 0.9, note: 'Updated' },
+        headers: { 'content-type': 'application/json' },
+      });
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.payload);
+      expect(body.outcome).toBe('good');
+      expect(body.score).toBe(0.9);
+    });
+  });
+
+  describe('Export endpoints', () => {
+    it('exports JSON report matching current state', async () => {
+      const { Storage } = await import('../src/storage.js');
+      const s = Storage.open({ dataDir });
+      seedFixtures(s.dbPath);
+      s.close();
+      server = await createApiServer({ dataDir, port: PORT });
+      const res = await server.inject({ method: 'GET', url: '/api/export/json' });
+      expect(res.statusCode).toBe(200);
+      expect(res.headers['content-type']).toContain('application/json');
+      const body = JSON.parse(res.payload);
+      expect(body.sessions.length).toBe(3);
+      expect(body.score).toBeDefined();
+      expect(body.tools).toBeDefined();
+    });
+
+    it('exports Markdown report', async () => {
+      const { Storage } = await import('../src/storage.js');
+      const s = Storage.open({ dataDir });
+      seedFixtures(s.dbPath);
+      s.close();
+      server = await createApiServer({ dataDir, port: PORT });
+      const res = await server.inject({ method: 'GET', url: '/api/export/markdown' });
+      expect(res.statusCode).toBe(200);
+      expect(res.headers['content-type']).toContain('text/markdown');
+      expect(res.payload).toContain('Effectiveness');
+      expect(res.payload).toContain('Session');
+    });
+
+    it('exports empty state report', async () => {
+      const { Storage } = await import('../src/storage.js');
+      const s = Storage.open({ dataDir });
+      s.close();
+      server = await createApiServer({ dataDir, port: PORT });
+      const res = await server.inject({ method: 'GET', url: '/api/export/json' });
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.payload);
+      expect(body.sessions.length).toBe(0);
+      expect(body.empty).toBe(true);
+    });
+
+    it('respects filters in export', async () => {
+      const { Storage } = await import('../src/storage.js');
+      const s = Storage.open({ dataDir });
+      seedFixtures(s.dbPath);
+      s.close();
+      server = await createApiServer({ dataDir, port: PORT });
+      const res = await server.inject({ method: 'GET', url: '/api/export/json?tool=claude-code' });
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.payload);
+      expect(body.sessions.length).toBe(1);
+      expect(body.sessions[0].sourceToolId).toBe('claude-code');
+    });
+  });
+
+  describe('Cross-origin protection', () => {
+    it('rejects POST with hostile Origin header', async () => {
+      const { Storage } = await import('../src/storage.js');
+      const s = Storage.open({ dataDir });
+      seedFixtures(s.dbPath);
+      s.close();
+      server = await createApiServer({ dataDir, port: PORT });
+      const res = await server.inject({
+        method: 'POST', url: '/api/sessions/sess2/annotations',
+        payload: { outcome: 'good' },
+        headers: { 'content-type': 'application/json', 'origin': 'https://evil.example.com' },
+      });
+      expect(res.statusCode).toBe(403);
+    });
+
+    it('allows POST from localhost origin', async () => {
+      const { Storage } = await import('../src/storage.js');
+      const s = Storage.open({ dataDir });
+      seedFixtures(s.dbPath);
+      s.close();
+      server = await createApiServer({ dataDir, port: PORT });
+      const res = await server.inject({
+        method: 'POST', url: '/api/sessions/sess2/annotations',
+        payload: { outcome: 'good' },
+        headers: { 'content-type': 'application/json', 'origin': 'http://127.0.0.1:' + PORT },
+      });
+      expect(res.statusCode).toBe(201);
+    });
+  });
+
+  describe('Read-only by default', () => {
+    it('unsupported methods return 400+', async () => {
+      const { Storage } = await import('../src/storage.js');
+      const s = Storage.open({ dataDir });
+      s.close();
+      server = await createApiServer({ dataDir, port: PORT });
+      const res = await server.inject({ method: 'DELETE', url: '/api/overview' });
+      expect(res.statusCode).toBeGreaterThanOrEqual(400);
+    });
+  });
+});
+
+describe('CLI export command', () => {
+  let tempDir: string;
+  let dataDir: string;
+
+  beforeEach(() => {
+    tempDir = mkdtempSync(join(tmpdir(), 'cet-export-test-'));
+    dataDir = join(tempDir, 'tracker-data');
+  });
+
+  afterEach(() => {
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('exports JSON to file', () => {
+    runCli(['init', '-d', dataDir]);
+    const outPath = join(tempDir, 'report.json');
+    const result = runCli(['export', '-d', dataDir, '--format', 'json', '-o', outPath]);
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('Exported');
+    expect(existsSync(outPath)).toBe(true);
+    const content = JSON.parse(readFileSync(outPath, 'utf-8'));
+    expect(content).toBeDefined();
+    expect(content.empty).toBe(true);
+  });
+
+  it('exports Markdown to file', () => {
+    runCli(['init', '-d', dataDir]);
+    const outPath = join(tempDir, 'report.md');
+    const result = runCli(['export', '-d', dataDir, '--format', 'markdown', '-o', outPath]);
+    expect(result.exitCode).toBe(0);
+    expect(existsSync(outPath)).toBe(true);
+    const content = readFileSync(outPath, 'utf-8');
+    expect(content).toContain('Effectiveness');
+  });
+
+  it('refuses overwrite without --overwrite flag', () => {
+    runCli(['init', '-d', dataDir]);
+    const outPath = join(tempDir, 'report.json');
+    writeFileSync(outPath, 'existing content');
+    const result = runCli(['export', '-d', dataDir, '--format', 'json', '-o', outPath]);
+    expect(result.exitCode).not.toBe(0);
+    expect(readFileSync(outPath, 'utf-8')).toBe('existing content');
+  });
+
+  it('allows overwrite with --overwrite flag', () => {
+    runCli(['init', '-d', dataDir]);
+    const outPath = join(tempDir, 'report.json');
+    writeFileSync(outPath, 'existing content');
+    const result = runCli(['export', '-d', dataDir, '--format', 'json', '-o', outPath, '--overwrite']);
+    expect(result.exitCode).toBe(0);
+    const content = JSON.parse(readFileSync(outPath, 'utf-8'));
+    expect(content).toBeDefined();
+  });
+
+  it('JSON export is valid JSON with expected fields', () => {
+    runCli(['init', '-d', dataDir]);
+    const outPath = join(tempDir, 'report.json');
+    runCli(['export', '-d', dataDir, '--format', 'json', '-o', outPath]);
+    const content = JSON.parse(readFileSync(outPath, 'utf-8'));
+    expect(content.score).toBeDefined();
+    expect(content.sessions).toBeDefined();
+    expect(Array.isArray(content.sessions)).toBe(true);
+  });
+});
+
+describe('CLI serve command', () => {
+  let tempDir: string;
+  let dataDir: string;
+
+  beforeEach(() => {
+    tempDir = mkdtempSync(join(tmpdir(), 'cet-serve-test-'));
+    dataDir = join(tempDir, 'tracker-data');
+  });
+
+  afterEach(() => {
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('shows help text with localhost URL', () => {
+    runCli(['init', '-d', dataDir]);
+    const result = runCli(['serve', '-d', dataDir, '-p', '43198', '--help']);
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout.toLowerCase()).toContain('port');
+  });
+});
+
+
+

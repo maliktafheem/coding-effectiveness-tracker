@@ -6,6 +6,8 @@ import { handleReport } from './commands/report.js';
 import { handleAnnotate } from './commands/annotate.js';
 import { handleSync } from './commands/sync.js';
 import { handleTestOutcome } from './commands/test-outcome.js';
+import { handleServe } from './commands/serve.js';
+import { handleExport } from './commands/export.js';
 
 // Ensure all importers are registered
 import './importers/index.js';
@@ -87,13 +89,23 @@ program
 
 program
   .command('serve')
-  .description('Start the local dashboard and API server')
+  .description('Start the local dashboard and API server (loopback only, 127.0.0.1)')
   .option('-d, --data-dir <path>', 'Custom data directory path')
   .option('-p, --port <port>', 'Port to listen on', '43187')
-  .action(() => {
-    console.log('Dashboard server will be available in a future release.');
-    process.exit(0);
-  });
+  .action(handleServe);
+
+program
+  .command('export')
+  .description('Export effectiveness report to a local file')
+  .option('-d, --data-dir <path>', 'Custom data directory path')
+  .option('-f, --format <fmt>', 'Export format (json or markdown)', 'json')
+  .option('-o, --output <path>', 'Output file path (required)')
+  .option('--overwrite', 'Overwrite existing file', false)
+  .option('-t, --tool <id>', 'Filter by source tool id')
+  .option('-p, --project <id>', 'Filter by project id')
+  .option('--from <date>', 'Start date filter')
+  .option('--to <date>', 'End date filter')
+  .action(handleExport);
 
 // Unknown command handler
 program.on('command:*', (operands) => {
@@ -109,3 +121,4 @@ export { program };
 if (process.argv[1]?.endsWith('cli.ts') || process.argv[1]?.endsWith('cli.js')) {
   program.parse(process.argv);
 }
+
