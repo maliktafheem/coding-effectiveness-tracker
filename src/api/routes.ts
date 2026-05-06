@@ -158,20 +158,62 @@ export function registerRoutes(app: FastifyInstance, opts: ServerOptions): void 
     } finally { storage.close(); }
   });
 
-  app.get('/api/tools', async () => {
+  app.get('/api/tools', async (request, reply) => {
     if (!isInitialized(dataDir)) return { tools: [] };
+    const q = request.query as Record<string, string>;
+    const filters = parseFilterParams(q, reply);
+    if (!filters) return;
+
     const storage = Storage.open({ dataDir });
     try {
       const db = storage.db;
-      const toolRows = db.prepare('SELECT DISTINCT source_tool_id FROM sessions').all() as { source_tool_id: string }[];
-      const tools = toolRows.map(t => {
-        const sessions = db.prepare('SELECT * FROM sessions WHERE source_tool_id = ?').all(t.source_tool_id) as Record<string, unknown>[];
-        const score = computeEffectivenessScore(storage, { toolId: t.source_tool_id });
-        const outcomeCount = (db.prepare(
-          'SELECT count(*) as cnt FROM outcomes o JOIN sessions s ON o.session_id = s.id WHERE s.source_tool_id = ?'
-        ).get(t.source_tool_id) as { cnt: number }).cnt;
+      // Build a filtered session query to scope each tool's data
+      let sessionSql = 'SELECT DISTINCT source_tool_id FROM sessions WHERE 1=1';
+      const sessionParams: (string|number)[] = [];
+      if (filters.tool) { sessionSql += ' AND source_tool_id = ?'; sessionParams.push(filters.tool); }
+      if (filters.project) { sessionSql += ' AND project_id = ?'; sessionParams.push(filters.project); }
+      if (filters.from) { sessionSql += ' AND started_at >= ?'; sessionParams.push(filters.from); }
+      if (filters.to) { sessionSql += ' AND started_at <= ?'; sessionParams.push(filters.to); }
+
+      const toolRows = db.prepare(sessionSql).all(...sessionParams) as { source_tool_id: string }[];
+
+      // Deduplicate tool IDs
+      const toolIds = [...new Set(toolRows.map(t => t.source_tool_id))];
+
+      const tools = toolIds.map(toolId => {
+        // Count sessions for this tool with same filters
+        let countSql = 'SELECT count(*) as cnt FROM sessions WHERE source_tool_id = ?';
+        const countParams: (string|number)[] = [toolId];
+        if (filters.project) { countSql += ' AND project_id = ?'; countParams.push(filters.project); }
+        if (filters.from) { countSql += ' AND started_at >= ?'; countParams.push(filters.from); }
+        if (filters.to) { countSql += ' AND started_at <= ?'; countParams.push(filters.to); }
+        const { cnt: sessionCount } = db.prepare(countSql).get(...countParams) as { cnt: number };
+
+        const score = computeEffectivenessScore(storage, {
+          toolId, projectId: filters.project,
+          from: filters.from, to: filters.to,
+        });
+
+        let outcomeCount: number;
+        if (filters.project || filters.from || filters.to) {
+          // Scope outcome count to filtered sessions
+          const ocSql = 'SELECT count(*) as cnt FROM outcomes o JOIN sessions s ON o.session_id = s.id WHERE s.source_tool_id = ?' +
+            (filters.project ? ' AND s.project_id = ?' : '') +
+            (filters.from ? ' AND s.started_at >= ?' : '') +
+            (filters.to ? ' AND s.started_at <= ?' : '');
+          const ocParams: (string|number)[] = [toolId];
+          if (filters.project) ocParams.push(filters.project);
+          if (filters.from) ocParams.push(filters.from);
+          if (filters.to) ocParams.push(filters.to);
+          outcomeCount = (db.prepare(ocSql).get(...ocParams) as { cnt: number }).cnt;
+        } else {
+          outcomeCount = (db.prepare(
+            'SELECT count(*) as cnt FROM outcomes o JOIN sessions s ON o.session_id = s.id WHERE s.source_tool_id = ?'
+          ).get(toolId) as { cnt: number }).cnt;
+        }
+
         return {
-          toolId: t.source_tool_id, sessionCount: sessions.length,
+          toolId, sessionCount,
           outcomeCount, score: score.aggregate,
         };
       });

@@ -653,6 +653,77 @@ describe('API validation gaps', () => {
     });
   });
 
+  // ── /api/tools with filters ────────────────────────────────────────────
+
+  describe('GET /api/tools with filters', () => {
+    it('honors tool filter', async () => {
+      const { Storage } = await import('../src/storage.js');
+      const s = Storage.open({ dataDir });
+      seedFixtures(s.dbPath);
+      s.close();
+      server = await createApiServer({ dataDir, port: PORT });
+      const res = await server.inject({ method: 'GET', url: '/api/tools?tool=codex' });
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.payload);
+      expect(body.tools.length).toBe(1);
+      expect(body.tools[0].toolId).toBe('codex');
+      expect(body.tools[0].sessionCount).toBe(2);
+    });
+
+    it('honors date range filter and returns filtered tool data', async () => {
+      const { Storage } = await import('../src/storage.js');
+      const s = Storage.open({ dataDir });
+      seedFixtures(s.dbPath);
+      s.close();
+      server = await createApiServer({ dataDir, port: PORT });
+      const res = await server.inject({ method: 'GET', url: '/api/tools?from=2025-01-16&to=2025-01-17' });
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.payload);
+      expect(body.tools.length).toBe(2);
+      const codex = body.tools.find((t: { toolId: string }) => t.toolId === 'codex');
+      expect(codex).toBeDefined();
+      expect(codex.sessionCount).toBe(1);
+    });
+
+    it('honors combined tool + date filters', async () => {
+      const { Storage } = await import('../src/storage.js');
+      const s = Storage.open({ dataDir });
+      seedFixtures(s.dbPath);
+      s.close();
+      server = await createApiServer({ dataDir, port: PORT });
+      const res = await server.inject({ method: 'GET', url: '/api/tools?tool=codex&from=2025-01-16' });
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.payload);
+      expect(body.tools.length).toBe(1);
+      expect(body.tools[0].toolId).toBe('codex');
+      expect(body.tools[0].sessionCount).toBe(1);
+    });
+
+    it('returns empty when no tools match filters', async () => {
+      const { Storage } = await import('../src/storage.js');
+      const s = Storage.open({ dataDir });
+      seedFixtures(s.dbPath);
+      s.close();
+      server = await createApiServer({ dataDir, port: PORT });
+      const res = await server.inject({ method: 'GET', url: '/api/tools?tool=nonexistent' });
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.payload);
+      expect(body.tools.length).toBe(0);
+    });
+
+    it('accepts project filter', async () => {
+      const { Storage } = await import('../src/storage.js');
+      const s = Storage.open({ dataDir });
+      seedFixtures(s.dbPath);
+      s.close();
+      server = await createApiServer({ dataDir, port: PORT });
+      const res = await server.inject({ method: 'GET', url: '/api/tools?project=proj1' });
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.payload);
+      expect(body.tools.length).toBe(2);
+    });
+  });
+
   // ── Raw export opt-in ───────────────────────────────────────────────────
 
   describe('Export raw opt-in (VAL-IMPORT-009, VAL-IMPORT-010)', () => {

@@ -137,7 +137,7 @@ export function App() {
         <>
           {page === 'overview' && <OverviewPage filterStr={filterStr} />}
           {page === 'timeline' && <TimelinePage filterStr={filterStr} onSelectSession={setSelectedSession} />}
-          {page === 'tools' && <ToolsPage />}
+          {page === 'tools' && <ToolsPage filterStr={filterStr} />}
           {page === 'export' && <ExportPage filterStr={filterStr} />}
         </>
       )}
@@ -264,8 +264,8 @@ function TimelinePage({ filterStr, onSelectSession }: { filterStr: string; onSel
   );
 }
 
-function ToolsPage() {
-  const { data, loading, error } = useFetch<{ tools: ToolComparison[] }>('/api/tools');
+function ToolsPage({ filterStr }: { filterStr: string }) {
+  const { data, loading, error } = useFetch<{ tools: ToolComparison[] }>('/api/tools' + filterStr, [filterStr]);
 
   if (loading) return <div className="loading">Loading tool comparison...</div>;
   if (error) return <div className="error"><h2>Error</h2><p>{error}</p></div>;
@@ -298,7 +298,9 @@ function ToolsPage() {
 }
 
 function SessionDetailView({ sessionId, onBack }: { sessionId: string; onBack: () => void }) {
+  // ALL hooks must run before any conditional returns (React rules of hooks)
   const { data, loading, error, refetch } = useFetch<SessionDetail>('/api/sessions/' + sessionId, [sessionId]);
+  const { data: overviewData } = useFetch<OverviewData>('/api/overview', []);
   const [showAnnotationForm, setShowAnnotationForm] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
@@ -337,9 +339,6 @@ function SessionDetailView({ sessionId, onBack }: { sessionId: string; onBack: (
   if (loading) return <div className="loading">Loading session...</div>;
   if (error) return <div className="error"><h2>Error</h2><p>{error}</p></div>;
   if (!data) return null;
-
-  // Score dimension summary from overview
-  const { data: overviewData } = useFetch<OverviewData>('/api/overview', []);
 
   return (
     <>
@@ -486,11 +485,16 @@ function AnnotationForm({ onSubmit }: { onSubmit: (form: { outcome: string; scor
 
 function ExportPage({ filterStr }: { filterStr: string }) {
   const [downloading, setDownloading] = useState<string | null>(null);
+  const [rawExport, setRawExport] = useState(false);
 
   const handleExport = async (format: 'json' | 'markdown') => {
     setDownloading(format);
+    // Append raw=true only when explicitly opted in
+    const urlSuffix = rawExport
+      ? (filterStr ? filterStr + '&raw=true' : '?raw=true')
+      : filterStr;
     try {
-      const res = await fetch(API_BASE + '/api/export/' + format + filterStr);
+      const res = await fetch(API_BASE + '/api/export/' + format + urlSuffix);
       if (!res.ok) throw new Error('Export failed');
       const blob = await res.blob();
       const ext = format === 'json' ? 'json' : 'md';
@@ -515,7 +519,7 @@ function ExportPage({ filterStr }: { filterStr: string }) {
       <p style={{ color: '#94a3b8', marginBottom: 16 }}>Export the current dashboard state as a report file. All data stays local.</p>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
         <label style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
-          <input type="checkbox" id="rawExport" /> Include raw metadata (optional, privacy-sensitive)
+          <input type="checkbox" id="rawExport" checked={rawExport} onChange={e => setRawExport(e.target.checked)} /> Include raw metadata (optional, privacy-sensitive)
         </label>
       </div>
       <div style={{ display: 'flex', gap: 12 }}>
