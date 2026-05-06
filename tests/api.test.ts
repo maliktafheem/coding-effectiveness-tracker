@@ -468,3 +468,354 @@ describe('CLI serve command', () => {
 
 
 
+// =============================================================================
+// Dashboard validation gap tests
+// =============================================================================
+
+describe('API validation gaps', () => {
+  let tempDir: string;
+  let dataDir: string;
+  let server: Awaited<ReturnType<typeof createApiServer>> | null = null;
+
+  beforeEach(() => {
+    tempDir = mkdtempSync(join(tmpdir(), 'cet-valgap-'));
+    dataDir = join(tempDir, 'tracker-data');
+    mkdirSync(dataDir, { recursive: true });
+    mkdirSync(join(dataDir, 'exports'), { recursive: true });
+    mkdirSync(join(dataDir, 'importers'), { recursive: true });
+    mkdirSync(join(dataDir, 'correlations'), { recursive: true });
+  });
+
+  afterEach(async () => {
+    if (server) { try { await server.close(); } catch { /* ignore */ } server = null; }
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  // ── /api/overview with filters ──────────────────────────────────────────
+
+  describe('GET /api/overview with filters', () => {
+    it('honors tool filter', async () => {
+      const { Storage } = await import('../src/storage.js');
+      const s = Storage.open({ dataDir });
+      seedFixtures(s.dbPath);
+      s.close();
+      server = await createApiServer({ dataDir, port: PORT });
+      const res = await server.inject({ method: 'GET', url: '/api/overview?tool=codex' });
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.payload);
+      expect(body.totalSessions).toBe(2); // sess1 and sess3 are codex
+      expect(body.tools).toEqual(['codex']);
+    });
+
+    it('honors project filter', async () => {
+      const { Storage } = await import('../src/storage.js');
+      const s = Storage.open({ dataDir });
+      seedFixtures(s.dbPath);
+      s.close();
+      server = await createApiServer({ dataDir, port: PORT });
+      const res = await server.inject({ method: 'GET', url: '/api/overview?project=proj1' });
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.payload);
+      expect(body.totalSessions).toBe(3);
+    });
+
+    it('honors from/to date filters', async () => {
+      const { Storage } = await import('../src/storage.js');
+      const s = Storage.open({ dataDir });
+      seedFixtures(s.dbPath);
+      s.close();
+      server = await createApiServer({ dataDir, port: PORT });
+      const res = await server.inject({ method: 'GET', url: '/api/overview?from=2025-01-16&to=2025-01-17' });
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.payload);
+      expect(body.totalSessions).toBe(2); // sess2 and sess3
+    });
+
+    it('honors combined tool + date filters', async () => {
+      const { Storage } = await import('../src/storage.js');
+      const s = Storage.open({ dataDir });
+      seedFixtures(s.dbPath);
+      s.close();
+      server = await createApiServer({ dataDir, port: PORT });
+      const res = await server.inject({ method: 'GET', url: '/api/overview?tool=claude-code&from=2025-01-16' });
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.payload);
+      expect(body.totalSessions).toBe(1); // sess2 only
+      expect(body.tools).toEqual(['claude-code']);
+    });
+  });
+
+  // ── Malformed query parameters ──────────────────────────────────────────
+
+  describe('Malformed query parameters return 4xx', () => {
+    it('returns 400 for invalid from date format', async () => {
+      const { Storage } = await import('../src/storage.js');
+      const s = Storage.open({ dataDir });
+      seedFixtures(s.dbPath);
+      s.close();
+      server = await createApiServer({ dataDir, port: PORT });
+      const res = await server.inject({ method: 'GET', url: '/api/overview?from=not-a-date' });
+      expect(res.statusCode).toBe(400);
+      const body = JSON.parse(res.payload);
+      expect(body.error).toContain('from');
+    });
+
+    it('returns 400 for invalid to date format', async () => {
+      const { Storage } = await import('../src/storage.js');
+      const s = Storage.open({ dataDir });
+      seedFixtures(s.dbPath);
+      s.close();
+      server = await createApiServer({ dataDir, port: PORT });
+      const res = await server.inject({ method: 'GET', url: '/api/overview?to=bad-date' });
+      expect(res.statusCode).toBe(400);
+      const body = JSON.parse(res.payload);
+      expect(body.error).toContain('to');
+    });
+
+    it('returns 400 for excessively long tool parameter', async () => {
+      const { Storage } = await import('../src/storage.js');
+      const s = Storage.open({ dataDir });
+      seedFixtures(s.dbPath);
+      s.close();
+      server = await createApiServer({ dataDir, port: PORT });
+      const res = await server.inject({ method: 'GET', url: '/api/overview?tool=' + 'a'.repeat(201) });
+      expect(res.statusCode).toBe(400);
+      const body = JSON.parse(res.payload);
+      expect(body.error).toContain('tool');
+    });
+
+    it('malformed date on timeline returns 400', async () => {
+      const { Storage } = await import('../src/storage.js');
+      const s = Storage.open({ dataDir });
+      seedFixtures(s.dbPath);
+      s.close();
+      server = await createApiServer({ dataDir, port: PORT });
+      const res = await server.inject({ method: 'GET', url: '/api/timeline?from=invalid' });
+      expect(res.statusCode).toBe(400);
+    });
+
+    it('malformed date on export/json returns 400', async () => {
+      const { Storage } = await import('../src/storage.js');
+      const s = Storage.open({ dataDir });
+      seedFixtures(s.dbPath);
+      s.close();
+      server = await createApiServer({ dataDir, port: PORT });
+      const res = await server.inject({ method: 'GET', url: '/api/export/json?from=bad' });
+      expect(res.statusCode).toBe(400);
+    });
+  });
+
+  // ── Timeline with correlation/outcome highlights ────────────────────────
+
+  describe('GET /api/timeline with highlights', () => {
+    it('includes correlationCount and outcomeCount per session', async () => {
+      const { Storage } = await import('../src/storage.js');
+      const s = Storage.open({ dataDir });
+      seedFixtures(s.dbPath);
+      s.close();
+      server = await createApiServer({ dataDir, port: PORT });
+      const res = await server.inject({ method: 'GET', url: '/api/timeline' });
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.payload);
+      expect(body.sessions.length).toBe(3);
+      // sess1 has correlation and outcome
+      const sess1 = body.sessions.find((s: { id: string }) => s.id === 'sess1');
+      expect(sess1).toBeDefined();
+      expect(sess1.correlationCount).toBeGreaterThanOrEqual(1);
+      expect(sess1.outcomeCount).toBeGreaterThanOrEqual(1);
+      expect(sess1.hasOutcome).toBe(true);
+      expect(sess1.outcomeLabels).toContain('good');
+      expect(sess1.reworkCount).toBe(1); // sess1 has reworkCount:1 in metadata_json
+      // sess2 has no correlations or outcomes
+      const sess2 = body.sessions.find((s: { id: string }) => s.id === 'sess2');
+      expect(sess2).toBeDefined();
+      expect(sess2.correlationCount).toBe(0);
+      expect(sess2.outcomeCount).toBe(0);
+      expect(sess2.hasOutcome).toBe(false);
+    });
+  });
+
+  // ── /api/projects endpoint ──────────────────────────────────────────────
+
+  describe('GET /api/projects', () => {
+    it('returns list of projects with session counts', async () => {
+      const { Storage } = await import('../src/storage.js');
+      const s = Storage.open({ dataDir });
+      seedFixtures(s.dbPath);
+      s.close();
+      server = await createApiServer({ dataDir, port: PORT });
+      const res = await server.inject({ method: 'GET', url: '/api/projects' });
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.payload);
+      expect(body.projects.length).toBe(1);
+      expect(body.projects[0].projectId).toBe('proj1');
+      expect(body.projects[0].sessionCount).toBe(3);
+    });
+  });
+
+  // ── Raw export opt-in ───────────────────────────────────────────────────
+
+  describe('Export raw opt-in (VAL-IMPORT-009, VAL-IMPORT-010)', () => {
+    it('default export excludes raw metadata', async () => {
+      const { Storage } = await import('../src/storage.js');
+      const s = Storage.open({ dataDir });
+      seedFixtures(s.dbPath);
+      s.close();
+      server = await createApiServer({ dataDir, port: PORT });
+      const res = await server.inject({ method: 'GET', url: '/api/export/json' });
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.payload);
+      const sess1 = body.sessions.find((s: { id: string }) => s.id === 'sess1');
+      expect(sess1).toBeDefined();
+      // Default export should NOT include raw metadata
+      expect(sess1.metadata).toBeUndefined();
+      // But should include reworkCount (safe aggregate indicator)
+      expect(sess1.reworkCount).toBe(1);
+    });
+
+    it('?raw=true includes metadata', async () => {
+      const { Storage } = await import('../src/storage.js');
+      const s = Storage.open({ dataDir });
+      seedFixtures(s.dbPath);
+      s.close();
+      server = await createApiServer({ dataDir, port: PORT });
+      const res = await server.inject({ method: 'GET', url: '/api/export/json?raw=true' });
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.payload);
+      const sess1 = body.sessions.find((s: { id: string }) => s.id === 'sess1');
+      expect(sess1).toBeDefined();
+      // With raw=true, metadata should be included
+      expect(sess1.metadata).toBeDefined();
+      expect(sess1.metadata.reworkCount).toBe(1);
+    });
+  });
+
+  // ── PATCH annotation score range ────────────────────────────────────────
+
+  describe('PATCH /api/annotations/:id (VAL-DASH-013)', () => {
+    it('rejects score out of range and keeps existing annotation unchanged', async () => {
+      const { Storage } = await import('../src/storage.js');
+      const s = Storage.open({ dataDir });
+      seedFixtures(s.dbPath);
+      // Insert an existing annotation
+      s.db.prepare("INSERT INTO outcomes (id, session_id, outcome_type, score, label, note, tags_json) VALUES ('ann-keep', 'sess1', 'manual', 0.5, 'ok', 'original note', null)").run();
+      s.close();
+      server = await createApiServer({ dataDir, port: PORT });
+      // Attempt PATCH with invalid score
+      const res = await server.inject({
+        method: 'PATCH', url: '/api/annotations/ann-keep',
+        payload: { score: 1.5 },
+        headers: { 'content-type': 'application/json' },
+      });
+      expect(res.statusCode).toBe(400);
+      const body = JSON.parse(res.payload);
+      expect(body.error).toContain('Score');
+
+      // Verify existing annotation is unchanged
+      const { Storage: S } = await import('../src/storage.js');
+      const s2 = S.open({ dataDir });
+      try {
+        const row = s2.db.prepare('SELECT * FROM outcomes WHERE id = ?').get('ann-keep') as { label: string; score: number; note: string };
+        expect(row.label).toBe('ok');
+        expect(row.score).toBe(0.5);
+        expect(row.note).toBe('original note');
+      } finally { s2.close(); }
+    });
+
+    it('rejects invalid outcome string and keeps existing annotation unchanged', async () => {
+      const { Storage } = await import('../src/storage.js');
+      const s = Storage.open({ dataDir });
+      seedFixtures(s.dbPath);
+      s.db.prepare("INSERT INTO outcomes (id, session_id, outcome_type, score, label, note, tags_json) VALUES ('ann-keep2', 'sess2', 'manual', 0.3, 'neutral', 'note', null)").run();
+      s.close();
+      server = await createApiServer({ dataDir, port: PORT });
+      const res = await server.inject({
+        method: 'PATCH', url: '/api/annotations/ann-keep2',
+        payload: { outcome: 'completely-invalid-outcome' },
+        headers: { 'content-type': 'application/json' },
+      });
+      expect(res.statusCode).toBe(400);
+
+      const { Storage: S } = await import('../src/storage.js');
+      const s2 = S.open({ dataDir });
+      try {
+        const row = s2.db.prepare('SELECT * FROM outcomes WHERE id = ?').get('ann-keep2') as { label: string };
+        expect(row.label).toBe('neutral');
+      } finally { s2.close(); }
+    });
+
+    it('rejects empty string outcome', async () => {
+      const { Storage } = await import('../src/storage.js');
+      const s = Storage.open({ dataDir });
+      seedFixtures(s.dbPath);
+      s.db.prepare("INSERT INTO outcomes (id, session_id, outcome_type, score, label, note, tags_json) VALUES ('ann-keep3', 'sess1', 'manual', 0.7, 'good', 'fine', null)").run();
+      s.close();
+      server = await createApiServer({ dataDir, port: PORT });
+      const res = await server.inject({
+        method: 'PATCH', url: '/api/annotations/ann-keep3',
+        payload: { outcome: '' },
+        headers: { 'content-type': 'application/json' },
+      });
+      expect(res.statusCode).toBe(400);
+    });
+  });
+
+  // ── Session detail with rework count ────────────────────────────────────
+
+  describe('GET /api/sessions/:id with rework indicators', () => {
+    it('shows reworkCount from metadata', async () => {
+      const { Storage } = await import('../src/storage.js');
+      const s = Storage.open({ dataDir });
+      seedFixtures(s.dbPath);
+      s.close();
+      server = await createApiServer({ dataDir, port: PORT });
+      const res = await server.inject({ method: 'GET', url: '/api/sessions/sess1' });
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.payload);
+      expect(body.reworkCount).toBe(1); // sess1 has reworkCount:1
+    });
+
+    it('shows 0 reworkCount when no metadata or no rework', async () => {
+      const { Storage } = await import('../src/storage.js');
+      const s = Storage.open({ dataDir });
+      seedFixtures(s.dbPath);
+      s.close();
+      server = await createApiServer({ dataDir, port: PORT });
+      const res = await server.inject({ method: 'GET', url: '/api/sessions/sess2' });
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.payload);
+      expect(body.reworkCount).toBe(0);
+      expect(body.metadata).toBeNull();
+    });
+  });
+
+  // ── Project filter on export APIs ───────────────────────────────────────
+
+  describe('Project filter on export', () => {
+    it('export/json respects project filter', async () => {
+      const { Storage } = await import('../src/storage.js');
+      const s = Storage.open({ dataDir });
+      seedFixtures(s.dbPath);
+      s.close();
+      server = await createApiServer({ dataDir, port: PORT });
+      const res = await server.inject({ method: 'GET', url: '/api/export/json?project=proj1' });
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.payload);
+      expect(body.totalSessions).toBe(3);
+      expect(body.sessions.every((s: { projectId: string }) => s.projectId === 'proj1')).toBe(true);
+    });
+
+    it('export/json with tool filter scopes correctly', async () => {
+      const { Storage } = await import('../src/storage.js');
+      const s = Storage.open({ dataDir });
+      seedFixtures(s.dbPath);
+      s.close();
+      server = await createApiServer({ dataDir, port: PORT });
+      const res = await server.inject({ method: 'GET', url: '/api/export/json?tool=claude-code' });
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.payload);
+      expect(body.totalSessions).toBe(1);
+      expect(body.sessions[0].sourceToolId).toBe('claude-code');
+    });
+  });
+});

@@ -6,6 +6,7 @@ export interface ExportOptions {
   projectId?: string;
   from?: string;
   to?: string;
+  raw?: boolean;
 }
 
 export interface JsonExport {
@@ -16,6 +17,17 @@ export interface JsonExport {
   period: { from: string | null; to: string | null };
   empty: boolean;
   generatedAt: string;
+}
+
+/** Extract rework count from session metadata_json. */
+function getReworkCount(s: Record<string, unknown>): number {
+  if (s.metadata_json) {
+    try {
+      const meta = JSON.parse(s.metadata_json as string);
+      if (typeof meta.reworkCount === 'number') return meta.reworkCount;
+    } catch { /* ignore */ }
+  }
+  return 0;
 }
 
 export function generateJsonExport(storage: Storage, opts: ExportOptions): JsonExport {
@@ -48,13 +60,22 @@ export function generateJsonExport(storage: Storage, opts: ExportOptions): JsonE
     const outcomes = (db.prepare('SELECT * FROM outcomes WHERE session_id = ?').all(s.id) as Record<string, unknown>[]).map(o => ({
       type: o.outcome_type, label: o.label, score: o.score, note: o.note,
     }));
-    return {
+    const entry: Record<string, unknown> = {
       id: s.id, sourceToolId: s.source_tool_id, projectId: s.project_id,
       startedAt: s.started_at, endedAt: s.ended_at, durationMs: s.duration_ms,
       summary: s.summary, model: s.model,
       tokensInput: s.tokens_input, tokensOutput: s.tokens_output,
-      costEstimate: s.cost_estimate, correlations, outcomes,
+      costEstimate: s.cost_estimate,
+      correlations, outcomes,
+      reworkCount: getReworkCount(s),
     };
+    // Only include raw metadata when explicit opt-in (raw=true) is used
+    if (opts.raw && s.metadata_json) {
+      try {
+        entry.metadata = JSON.parse(s.metadata_json as string);
+      } catch { /* ignore */ }
+    }
+    return entry;
   });
   return {
     score: { aggregate: score.aggregate, dimensions: score.dimensions, missingInputs: score.missingInputs },
@@ -73,7 +94,7 @@ export function generateMarkdownExport(storage: Storage, opts: ExportOptions): s
   lines.push('Privacy: All data stays local. No telemetry or external services.');
   lines.push('');
   if (data.empty) {
-    lines.push('**No sessions found.** Import data with: `cet import --fixture <path>`');
+    lines.push('**No sessions found.** Import data with: cet import --fixture <path>');
     return lines.join('\n');
   }
   lines.push('## Overview');
@@ -85,9 +106,10 @@ export function generateMarkdownExport(storage: Storage, opts: ExportOptions): s
   lines.push('');
   lines.push('## Score Dimensions');
   lines.push('');
-  for (const dim of data.score.dimensions as { name: string; value: number; explanation: string; available: boolean }[]) {
+  for (const dim of data.score.dimensions as { name: string; value: number; explanation: string; available: boolean; weight: number }[]) {
     const avail = dim.available ? '' : ' (unknown)';
-    lines.push('- **' + dim.name + ':** ' + Math.round(dim.value * 100) + '%' + avail + ' - ' + dim.explanation);
+    const wt = Math.round(dim.weight * 100);
+    lines.push('- **' + dim.name + ':** ' + Math.round(dim.value * 100) + '%' + avail + ' (weight: ' + wt + '%) - ' + dim.explanation);
   }
   if (data.score.missingInputs.length > 0) {
     lines.push('');
@@ -116,8 +138,12 @@ export function generateMarkdownExport(storage: Storage, opts: ExportOptions): s
   for (const s of data.sessions as Record<string, unknown>[]) {
     lines.push('### ' + (s.summary || s.id));
     lines.push('- Tool: ' + s.sourceToolId);
+    if (s.projectId) lines.push('- Project: ' + s.projectId);
     lines.push('- Started: ' + (s.startedAt || 'N/A'));
     if (s.model) lines.push('- Model: ' + s.model);
+    if (typeof s.reworkCount === 'number' && (s.reworkCount as number) > 0) {
+      lines.push('- Rework attempts: ' + s.reworkCount);
+    }
     const corrs = s.correlations as { type: string; confidence: number; reasons: string[] }[];
     if (corrs.length > 0) {
       lines.push('- Correlations: ' + corrs.map(c => c.type + ' (' + Math.round(c.confidence * 100) + '%)').join(', '));

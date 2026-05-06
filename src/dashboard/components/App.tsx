@@ -16,6 +16,11 @@ interface TimelineSession {
   id: string; sourceToolId: string; projectId: string | null;
   startedAt: string; endedAt: string | null; durationMs: number | null;
   summary: string | null; model: string | null;
+  correlationCount: number;
+  outcomeCount: number;
+  outcomeLabels: string[];
+  hasOutcome: boolean;
+  reworkCount: number;
 }
 
 interface SessionDetail extends TimelineSession {
@@ -30,7 +35,18 @@ interface ToolComparison {
   toolId: string; sessionCount: number; outcomeCount: number; score: number;
 }
 
+interface ProjectInfo {
+  projectId: string; sessionCount: number;
+}
+
 type Page = 'overview' | 'timeline' | 'tools' | 'export';
+
+/** Read initial page from URL hash, default to overview. */
+function getPageFromHash(): Page {
+  const hash = window.location.hash.replace('#', '');
+  if (['overview', 'timeline', 'tools', 'export'].includes(hash)) return hash as Page;
+  return 'overview';
+}
 
 function useFetch<T>(url: string, deps: unknown[] = []): { data: T | null; loading: boolean; error: string | null; refetch: () => void } {
   const [data, setData] = useState<T | null>(null);
@@ -59,14 +75,30 @@ function useFetch<T>(url: string, deps: unknown[] = []): { data: T | null; loadi
 }
 
 export function App() {
-  const [page, setPage] = useState<Page>('overview');
+  const [page, setPage] = useState<Page>(getPageFromHash);
   const [selectedSession, setSelectedSession] = useState<string | null>(null);
   const [toolFilter, setToolFilter] = useState('');
+  const [projectFilter, setProjectFilter] = useState('');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
 
+  // Sync page state to URL hash for refresh persistence
+  useEffect(() => {
+    window.location.hash = selectedSession ? 'session-' + selectedSession : page;
+  }, [page, selectedSession]);
+
+  // Check hash for session detail on mount
+  useEffect(() => {
+    const hash = window.location.hash.replace('#', '');
+    if (hash.startsWith('session-')) {
+      const sid = hash.slice(8);
+      if (sid) setSelectedSession(sid);
+    }
+  }, []);
+
   const filterParams = new URLSearchParams();
   if (toolFilter) filterParams.set('tool', toolFilter);
+  if (projectFilter) filterParams.set('project', projectFilter);
   if (fromDate) filterParams.set('from', fromDate);
   if (toDate) filterParams.set('to', toDate);
   const filterStr = filterParams.toString() ? '?' + filterParams.toString() : '';
@@ -93,9 +125,10 @@ export function App() {
           <option value="cursor">Cursor</option>
           <option value="factory-droid">Factory Droid</option>
         </select>
+        <ProjectFilterSelect value={projectFilter} onChange={setProjectFilter} />
         <input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)} placeholder="From" />
         <input type="date" value={toDate} onChange={e => setToDate(e.target.value)} placeholder="To" />
-        {(toolFilter || fromDate || toDate) && <button className="btn btn-secondary" onClick={() => { setToolFilter(''); setFromDate(''); setToDate(''); setSelectedSession(null); }}>Clear</button>}
+        {(toolFilter || projectFilter || fromDate || toDate) && <button className="btn btn-secondary" onClick={() => { setToolFilter(''); setProjectFilter(''); setFromDate(''); setToDate(''); setSelectedSession(null); }}>Clear</button>}
       </div>
 
       {selectedSession ? (
@@ -112,11 +145,23 @@ export function App() {
   );
 }
 
+function ProjectFilterSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const { data } = useFetch<{ projects: ProjectInfo[] }>('/api/projects');
+  return (
+    <select value={value} onChange={e => onChange(e.target.value)}>
+      <option value="">All projects</option>
+      {(data?.projects || []).map(p => (
+        <option key={p.projectId} value={p.projectId}>{p.projectId} ({p.sessionCount})</option>
+      ))}
+    </select>
+  );
+}
+
 function OverviewPage({ filterStr }: { filterStr: string }) {
   const { data, loading, error } = useFetch<OverviewData>('/api/overview' + filterStr, [filterStr]);
 
   if (loading) return <div className="loading">Loading overview...</div>;
-  if (error) return <div className="error"><h2>Error</h2><p>{error}</p><p>Check that the server is running and try refreshing.</p></div>;
+  if (error) return <div className="error"><h2>Error</h2><p>{error}</p><p>Check that the server is running and try refreshing.</p><button className="btn btn-primary" onClick={() => window.location.reload()} style={{marginTop: 8}}>Retry</button></div>;
   if (!data || data.empty) return (
     <div className="empty">
       <h2>No Sessions Available</h2>
@@ -196,15 +241,19 @@ function TimelinePage({ filterStr, onSelectSession }: { filterStr: string; onSel
           <div className="empty"><p>No sessions match the current filters.</p></div>
         ) : (
           <table>
-            <thead><tr><th>Tool</th><th>Summary</th><th>Started</th><th>Duration</th><th>Model</th></tr></thead>
+            <thead><tr><th>Tool</th><th>Project</th><th>Summary</th><th>Started</th><th>Duration</th><th>Model</th><th>Corr.</th><th>Outcome</th><th>Rework</th></tr></thead>
             <tbody>
               {data.sessions.map(s => (
                 <tr key={s.id} style={{ cursor: 'pointer' }} onClick={() => onSelectSession(s.id)}>
                   <td><span className="tag">{s.sourceToolId}</span></td>
+                  <td style={{ color: '#94a3b8', fontSize: '0.75rem' }}>{s.projectId || '-'}</td>
                   <td>{s.summary || s.id}</td>
                   <td>{s.startedAt ? new Date(s.startedAt).toLocaleDateString() : 'N/A'}</td>
                   <td>{s.durationMs ? Math.round(s.durationMs / 60000) + 'min' : 'N/A'}</td>
-                  <td>{s.model || '-'}</td>
+                  <td style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{s.model || '-'}</td>
+                  <td>{s.correlationCount > 0 ? <span className="correlation-badge high">{s.correlationCount}</span> : <span style={{color: '#64748b'}}>0</span>}</td>
+                  <td>{s.hasOutcome ? <span className="tag">{s.outcomeLabels[0]}</span> : <span style={{color: '#64748b'}}>-</span>}</td>
+                  <td>{s.reworkCount > 0 ? <span style={{color: '#fbbf24', fontWeight: 'bold'}}>↺{s.reworkCount}</span> : '-'}</td>
                 </tr>
               ))}
             </tbody>
@@ -254,13 +303,20 @@ function SessionDetailView({ sessionId, onBack }: { sessionId: string; onBack: (
   const [toast, setToast] = useState<string | null>(null);
 
   const submitAnnotation = async (form: { outcome: string; score: string; note: string }) => {
+    // Frontend validation before sending
+    const scoreNum = form.score ? parseFloat(form.score) : undefined;
+    if (scoreNum !== undefined && (isNaN(scoreNum) || scoreNum < 0 || scoreNum > 1)) {
+      setToast('Error: Score must be between 0 and 1.');
+      setTimeout(() => setToast(null), 3000);
+      return;
+    }
     try {
       const res = await fetch(API_BASE + '/api/sessions/' + sessionId + '/annotations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           outcome: form.outcome,
-          score: form.score ? parseFloat(form.score) : undefined,
+          score: scoreNum,
           note: form.note || undefined,
         }),
       });
@@ -282,6 +338,9 @@ function SessionDetailView({ sessionId, onBack }: { sessionId: string; onBack: (
   if (error) return <div className="error"><h2>Error</h2><p>{error}</p></div>;
   if (!data) return null;
 
+  // Score dimension summary from overview
+  const { data: overviewData } = useFetch<OverviewData>('/api/overview', []);
+
   return (
     <>
       <button className="btn btn-secondary" onClick={onBack} style={{ marginBottom: 16 }}>Back to Timeline</button>
@@ -289,14 +348,39 @@ function SessionDetailView({ sessionId, onBack }: { sessionId: string; onBack: (
         <h2>{data.summary || data.id}</h2>
         <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' }}>
           <div><strong>Tool:</strong> <span className="tag">{data.sourceToolId}</span></div>
+          {data.projectId && <div><strong>Project:</strong> <span className="tag">{data.projectId}</span></div>}
           <div><strong>Model:</strong> {data.model || 'N/A'}</div>
           <div><strong>Started:</strong> {data.startedAt ? new Date(data.startedAt).toLocaleString() : 'N/A'}</div>
           <div><strong>Duration:</strong> {data.durationMs ? Math.round(data.durationMs / 60000) + ' min' : 'N/A'}</div>
           {data.tokensInput != null && <div><strong>Tokens In:</strong> {data.tokensInput.toLocaleString()}</div>}
           {data.tokensOutput != null && <div><strong>Tokens Out:</strong> {data.tokensOutput.toLocaleString()}</div>}
-          {data.costEstimate != null && <div><strong>Cost:</strong> ${data.costEstimate.toFixed(3)}</div>}
+          {data.costEstimate != null && <div><strong>Cost:</strong> </div>}
+          {data.reworkCount > 0 && <div><strong>Rework:</strong> <span style={{color: '#fbbf24', fontWeight: 'bold'}}>{data.reworkCount} rework attempt(s)</span></div>}
         </div>
       </div>
+
+      {/* Score Weighting / Balance Inputs */}
+      {overviewData && overviewData.score.dimensions.length > 0 && (
+        <div className="card">
+          <h2>Score Weighting &amp; Balance Inputs</h2>
+          <table>
+            <thead><tr><th>Dimension</th><th>Weight</th><th>Score</th><th>Status</th></tr></thead>
+            <tbody>
+              {overviewData.score.dimensions.map(dim => (
+                <tr key={dim.name}>
+                  <td>{dim.name}</td>
+                  <td>{Math.round(dim.weight * 100)}%</td>
+                  <td>{dim.available ? Math.round(dim.value * 100) + '%' : 'unknown'}</td>
+                  <td>{dim.available ? <span style={{color: '#22c55e'}}>Available</span> : <span style={{color: '#94a3b8'}}>Unavailable</span>}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p style={{color: '#94a3b8', fontSize: '0.8rem', marginTop: 8}}>
+            Aggregate score: {Math.round(overviewData.score.aggregate * 100)}%. Only available dimensions contribute to the weighted average; unavailable dimensions do not lower the score.
+          </p>
+        </div>
+      )}
 
       <div className="card">
         <h2>Correlations</h2>
@@ -358,9 +442,24 @@ function AnnotationForm({ onSubmit }: { onSubmit: (form: { outcome: string; scor
   const [outcome, setOutcome] = useState('good');
   const [score, setScore] = useState('');
   const [note, setNote] = useState('');
+  const [validationError, setValidationError] = useState<string | null>(null);
+
+  const handleSubmit = () => {
+    // Validate score range
+    if (score) {
+      const num = parseFloat(score);
+      if (isNaN(num) || num < 0 || num > 1) {
+        setValidationError('Score must be a number between 0 and 1.');
+        return;
+      }
+    }
+    setValidationError(null);
+    onSubmit({ outcome, score, note });
+  };
 
   return (
     <div className="annotation-form" style={{ marginTop: 12 }}>
+      {validationError && <div className="error" style={{ marginBottom: 8, padding: '8px 12px', fontSize: '0.8rem' }}>{validationError}</div>}
       <div>
         <label style={{ display: 'block', marginBottom: 4, color: '#94a3b8', fontSize: '0.8rem' }}>Outcome</label>
         <select value={outcome} onChange={e => setOutcome(e.target.value)}>
@@ -377,7 +476,10 @@ function AnnotationForm({ onSubmit }: { onSubmit: (form: { outcome: string; scor
         <label style={{ display: 'block', marginBottom: 4, color: '#94a3b8', fontSize: '0.8rem' }}>Note (optional)</label>
         <textarea value={note} onChange={e => setNote(e.target.value)} rows={2} placeholder="Add a note..." />
       </div>
-      <button className="btn btn-primary" onClick={() => onSubmit({ outcome, score, note })}>Save Annotation</button>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button className="btn btn-primary" onClick={handleSubmit}>Save Annotation</button>
+        <button className="btn btn-secondary" onClick={() => { setScore(''); setNote(''); setValidationError(null); }}>Reset</button>
+      </div>
     </div>
   );
 }
@@ -411,6 +513,11 @@ function ExportPage({ filterStr }: { filterStr: string }) {
     <div className="card">
       <h2>Export Report</h2>
       <p style={{ color: '#94a3b8', marginBottom: 16 }}>Export the current dashboard state as a report file. All data stays local.</p>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
+        <label style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
+          <input type="checkbox" id="rawExport" /> Include raw metadata (optional, privacy-sensitive)
+        </label>
+      </div>
       <div style={{ display: 'flex', gap: 12 }}>
         <button className="btn btn-primary" onClick={() => handleExport('json')} disabled={downloading !== null}>
           {downloading === 'json' ? 'Downloading...' : 'Export JSON'}

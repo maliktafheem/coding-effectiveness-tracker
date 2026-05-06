@@ -11,6 +11,58 @@ const VALID_OUTCOMES = new Set([
   'poor','rejected','reverted','abandoned','unknown',
 ]);
 
+/** Parse date param — returns ISO string or null. Validates format. */
+function parseDateParam(val: string | undefined): string | null {
+  if (!val) return null;
+  if (val.length === 10 && /^\d{4}-\d{2}-\d{2}$/.test(val)) {
+    return val;
+  }
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/.test(val)) {
+    return val;
+  }
+  return null;
+}
+
+/** Parse and validate common filter query params. Returns parsed filters or undefined with error sent. */
+function parseFilterParams(q: Record<string, string>, reply: { code: (c: number) => { send: (o: unknown) => void } }): { tool?: string; project?: string; from?: string; to?: string; raw?: boolean } | undefined {
+  const result: { tool?: string; project?: string; from?: string; to?: string; raw?: boolean } = {};
+
+  if (q.tool !== undefined) {
+    if (typeof q.tool !== 'string' || q.tool.length > 200) {
+      reply.code(400).send({ error: 'Invalid tool filter parameter.' });
+      return undefined;
+    }
+    result.tool = q.tool;
+  }
+  if (q.project !== undefined) {
+    if (typeof q.project !== 'string' || q.project.length > 200) {
+      reply.code(400).send({ error: 'Invalid project filter parameter.' });
+      return undefined;
+    }
+    result.project = q.project;
+  }
+  if (q.from !== undefined) {
+    const parsed = parseDateParam(q.from);
+    if (!parsed) {
+      reply.code(400).send({ error: 'Invalid from date format. Use YYYY-MM-DD or ISO 8601.' });
+      return undefined;
+    }
+    result.from = q.from.length === 10 ? q.from + 'T00:00:00Z' : q.from;
+  }
+  if (q.to !== undefined) {
+    const parsed = parseDateParam(q.to);
+    if (!parsed) {
+      reply.code(400).send({ error: 'Invalid to date format. Use YYYY-MM-DD or ISO 8601.' });
+      return undefined;
+    }
+    result.to = q.to.length === 10 ? q.to + 'T23:59:59Z' : q.to;
+  }
+  if (q.raw !== undefined) {
+    result.raw = q.raw === 'true';
+  }
+  return result;
+}
+
 export function registerRoutes(app: FastifyInstance, opts: ServerOptions): void {
   const dataDir = resolveDataDir(opts.dataDir);
 
@@ -18,23 +70,39 @@ export function registerRoutes(app: FastifyInstance, opts: ServerOptions): void 
     return { status: 'ok', timestamp: new Date().toISOString() };
   });
 
-  app.get('/api/overview', async (_request, reply) => {
+  app.get('/api/overview', async (request, reply) => {
     if (!isInitialized(dataDir)) {
       return reply.code(503).send({ error: 'Not initialized', message: 'Run cet init first' });
     }
+    const q = request.query as Record<string, string>;
+    const filters = parseFilterParams(q, reply);
+    if (!filters) return;
+
     const storage = Storage.open({ dataDir });
     try {
       const db = storage.db;
-      const sessions = db.prepare('SELECT * FROM sessions ORDER BY started_at').all() as Record<string, unknown>[];
+      let sql = 'SELECT * FROM sessions WHERE 1=1';
+      const params: (string|number)[] = [];
+      if (filters.tool) { sql += ' AND source_tool_id = ?'; params.push(filters.tool); }
+      if (filters.project) { sql += ' AND project_id = ?'; params.push(filters.project); }
+      if (filters.from) { sql += ' AND started_at >= ?'; params.push(filters.from); }
+      if (filters.to) { sql += ' AND started_at <= ?'; params.push(filters.to); }
+      sql += ' ORDER BY started_at';
+
+      const sessions = db.prepare(sql).all(...params) as Record<string, unknown>[];
       if (sessions.length === 0) {
         return {
           totalSessions: 0, tools: [], dateRange: { from: null, to: null },
-          outcomeCount: 0, score: { aggregate: 0, dimensions: [], missingInputs: ['No sessions available.'] },
+          outcomeCount: 0,
+          score: { aggregate: 0, dimensions: [], missingInputs: ['No sessions available.'] },
           empty: true, message: 'No sessions found. Import data with: cet import --fixture <path>',
         };
       }
       const tools = [...new Set(sessions.map(s => s.source_tool_id as string))];
-      const score = computeEffectivenessScore(storage, {});
+      const score = computeEffectivenessScore(storage, {
+        toolId: filters.tool, projectId: filters.project,
+        from: filters.from, to: filters.to,
+      });
       const outcomeCount = (db.prepare('SELECT count(*) as cnt FROM outcomes').get() as { cnt: number }).cnt;
       return {
         totalSessions: sessions.length, tools,
@@ -45,25 +113,47 @@ export function registerRoutes(app: FastifyInstance, opts: ServerOptions): void 
     } finally { storage.close(); }
   });
 
-  app.get('/api/timeline', async (request) => {
+  app.get('/api/timeline', async (request, reply) => {
     const q = request.query as Record<string, string>;
     if (!isInitialized(dataDir)) return { sessions: [], total: 0 };
+    const filters = parseFilterParams(q, reply);
+    if (!filters) return;
+
     const storage = Storage.open({ dataDir });
     try {
       const db = storage.db;
       let sql = 'SELECT * FROM sessions WHERE 1=1';
       const params: (string|number)[] = [];
-      if (q.tool) { sql += ' AND source_tool_id = ?'; params.push(q.tool); }
-      if (q.project) { sql += ' AND project_id = ?'; params.push(q.project); }
-      if (q.from) { sql += ' AND started_at >= ?'; params.push(q.from.length === 10 ? q.from + 'T00:00:00Z' : q.from); }
-      if (q.to) { sql += ' AND started_at <= ?'; params.push(q.to.length === 10 ? q.to + 'T23:59:59Z' : q.to); }
+      if (filters.tool) { sql += ' AND source_tool_id = ?'; params.push(filters.tool); }
+      if (filters.project) { sql += ' AND project_id = ?'; params.push(filters.project); }
+      if (filters.from) { sql += ' AND started_at >= ?'; params.push(filters.from); }
+      if (filters.to) { sql += ' AND started_at <= ?'; params.push(filters.to); }
       sql += ' ORDER BY started_at';
       const rows = db.prepare(sql).all(...params) as Record<string, unknown>[];
-      const sessions = rows.map(s => ({
-        id: s.id, sourceToolId: s.source_tool_id, projectId: s.project_id,
-        externalId: s.external_id, startedAt: s.started_at, endedAt: s.ended_at,
-        durationMs: s.duration_ms, summary: s.summary, model: s.model,
-      }));
+
+      const sessions = rows.map(s => {
+        const corrCount = (db.prepare('SELECT count(*) as cnt FROM correlations WHERE session_id = ?').get(s.id) as { cnt: number }).cnt;
+        const outcomes = (db.prepare('SELECT label, score FROM outcomes WHERE session_id = ?').all(s.id) as { label: string; score: number | null }[]);
+        const outcomeLabels = outcomes.map(o => o.label);
+        const hasOutcome = outcomes.length > 0;
+        let reworkCount = 0;
+        if (s.metadata_json) {
+          try {
+            const meta = JSON.parse(s.metadata_json as string);
+            if (typeof meta.reworkCount === 'number') reworkCount = meta.reworkCount;
+          } catch { /* ignore */ }
+        }
+        return {
+          id: s.id, sourceToolId: s.source_tool_id, projectId: s.project_id,
+          externalId: s.external_id, startedAt: s.started_at, endedAt: s.ended_at,
+          durationMs: s.duration_ms, summary: s.summary, model: s.model,
+          correlationCount: corrCount,
+          outcomeCount: outcomes.length,
+          outcomeLabels,
+          hasOutcome,
+          reworkCount,
+        };
+      });
       return { sessions, total: sessions.length };
     } finally { storage.close(); }
   });
@@ -89,6 +179,20 @@ export function registerRoutes(app: FastifyInstance, opts: ServerOptions): void 
     } finally { storage.close(); }
   });
 
+  app.get('/api/projects', async () => {
+    if (!isInitialized(dataDir)) return { projects: [] };
+    const storage = Storage.open({ dataDir });
+    try {
+      const db = storage.db;
+      const projectRows = db.prepare('SELECT DISTINCT project_id FROM sessions WHERE project_id IS NOT NULL ORDER BY project_id').all() as { project_id: string }[];
+      const projects = projectRows.map(p => {
+        const sessionCount = (db.prepare('SELECT count(*) as cnt FROM sessions WHERE project_id = ?').get(p.project_id) as { cnt: number }).cnt;
+        return { projectId: p.project_id, sessionCount };
+      });
+      return { projects };
+    } finally { storage.close(); }
+  });
+
   app.get('/api/sessions/:id', async (request, reply) => {
     const { id } = request.params as { id: string };
     if (!isInitialized(dataDir)) return reply.code(503).send({ error: 'Not initialized' });
@@ -104,13 +208,22 @@ export function registerRoutes(app: FastifyInstance, opts: ServerOptions): void 
       const outcomes = (db.prepare('SELECT * FROM outcomes WHERE session_id = ?').all(id) as Record<string, unknown>[]).map(o => ({
         id: o.id, type: o.outcome_type, label: o.label, score: o.score, note: o.note,
       }));
+      let reworkCount = 0;
+      let sessionMetadata: Record<string, unknown> | null = null;
+      if (session.metadata_json) {
+        try {
+          const parsed = JSON.parse(session.metadata_json as string) as Record<string, unknown>;
+          sessionMetadata = parsed;
+          if (typeof parsed.reworkCount === 'number') reworkCount = parsed.reworkCount;
+        } catch { /* ignore */ }
+      }
       return {
         id: session.id, sourceToolId: session.source_tool_id, projectId: session.project_id,
         externalId: session.external_id, startedAt: session.started_at, endedAt: session.ended_at,
         durationMs: session.duration_ms, summary: session.summary, model: session.model,
         tokensInput: session.tokens_input, tokensOutput: session.tokens_output,
         costEstimate: session.cost_estimate,
-        metadata: session.metadata_json ? JSON.parse(session.metadata_json as string) : null,
+        metadata: sessionMetadata, reworkCount,
         correlations, outcomes, uncorrelated: correlations.length === 0,
       };
     } finally { storage.close(); }
@@ -158,10 +271,25 @@ export function registerRoutes(app: FastifyInstance, opts: ServerOptions): void 
       const db = storage.db;
       const existing = db.prepare('SELECT * FROM outcomes WHERE id = ?').get(id) as Record<string, unknown> | undefined;
       if (!existing) return reply.code(404).send({ error: 'Annotation not found' });
-      const outcome = typeof body.outcome === 'string' ? body.outcome.toLowerCase().trim() : (existing.label as string);
-      if (!VALID_OUTCOMES.has(outcome)) {
-        return reply.code(400).send({ error: 'Invalid outcome' });
+
+      // Validate score BEFORE any mutation — if invalid, return error without changing anything
+      if (body.score !== undefined && body.score !== null) {
+        if (typeof body.score !== 'number' || body.score < 0 || body.score > 1) {
+          return reply.code(400).send({ error: 'Score must be a number between 0 and 1.' });
+        }
       }
+      // Validate outcome if provided
+      if (body.outcome !== undefined && body.outcome !== null) {
+        if (typeof body.outcome !== 'string' || body.outcome.trim() === '') {
+          return reply.code(400).send({ error: 'Outcome must be a non-empty string if provided.' });
+        }
+        const outcomeVal = (body.outcome as string).toLowerCase().trim();
+        if (!VALID_OUTCOMES.has(outcomeVal)) {
+          return reply.code(400).send({ error: 'Invalid outcome. Accepted: ' + Array.from(VALID_OUTCOMES).join(', ') });
+        }
+      }
+
+      const outcome = typeof body.outcome === 'string' ? body.outcome.toLowerCase().trim() : (existing.label as string);
       const score = typeof body.score === 'number' ? body.score : (existing.score as number | null);
       const note = typeof body.note === 'string' ? body.note : (existing.note as string | null);
       db.prepare('UPDATE outcomes SET label = ?, score = ?, note = ?, updated_at = datetime(\'now\') WHERE id = ?')
@@ -170,21 +298,33 @@ export function registerRoutes(app: FastifyInstance, opts: ServerOptions): void 
     } finally { storage.close(); }
   });
 
-  app.get('/api/export/json', async (request) => {
+  app.get('/api/export/json', async (request, reply) => {
     const q = request.query as Record<string, string>;
     if (!isInitialized(dataDir)) return { sessions: [], score: { aggregate: 0 }, tools: [], empty: true };
+    const filters = parseFilterParams(q, reply);
+    if (!filters) return;
+
     const storage = Storage.open({ dataDir });
     try {
-      return generateJsonExport(storage, { toolId: q.tool, projectId: q.project, from: q.from, to: q.to });
+      return generateJsonExport(storage, {
+        toolId: filters.tool, projectId: filters.project,
+        from: filters.from, to: filters.to, raw: filters.raw,
+      });
     } finally { storage.close(); }
   });
 
   app.get('/api/export/markdown', async (request, reply) => {
     const q = request.query as Record<string, string>;
     if (!isInitialized(dataDir)) return reply.type('text/markdown').send('# No Data\nNo sessions available.');
+    const filters = parseFilterParams(q, reply);
+    if (!filters) return;
+
     const storage = Storage.open({ dataDir });
     try {
-      const md = generateMarkdownExport(storage, { toolId: q.tool, projectId: q.project, from: q.from, to: q.to });
+      const md = generateMarkdownExport(storage, {
+        toolId: filters.tool, projectId: filters.project,
+        from: filters.from, to: filters.to, raw: filters.raw,
+      });
       return reply.type('text/markdown').send(md);
     } finally { storage.close(); }
   });
