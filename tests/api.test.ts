@@ -128,7 +128,7 @@ describe('API Server', () => {
       expect(res.statusCode).toBe(200);
       const body = JSON.parse(res.payload);
       expect(body.sessions.length).toBe(3);
-      const times = body.sessions.map((s: any) => new Date(s.startedAt).getTime());
+      const times = body.sessions.map((s: { startedAt: string }) => new Date(s.startedAt).getTime());
       for (let i = 1; i < times.length; i++) {
         expect(times[i]).toBeGreaterThanOrEqual(times[i - 1]);
       }
@@ -144,7 +144,7 @@ describe('API Server', () => {
       expect(res.statusCode).toBe(200);
       const body = JSON.parse(res.payload);
       expect(body.sessions.length).toBe(2);
-      expect(body.sessions.every((s: any) => s.sourceToolId === 'codex')).toBe(true);
+      expect(body.sessions.every((s: { sourceToolId: string }) => s.sourceToolId === 'codex')).toBe(true);
     });
 
     it('filters by date range', async () => {
@@ -171,7 +171,7 @@ describe('API Server', () => {
       expect(res.statusCode).toBe(200);
       const body = JSON.parse(res.payload);
       expect(body.tools.length).toBe(2);
-      const codex = body.tools.find((t: any) => t.toolId === 'codex');
+      const codex = body.tools.find((t: { toolId: string }) => t.toolId === 'codex');
       expect(codex).toBeDefined();
       expect(codex.sessionCount).toBe(2);
     });

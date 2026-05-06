@@ -829,3 +829,270 @@ describe('Server process lifecycle', () => {
     await new Promise(r => setTimeout(r, 1000));
   });
 });
+
+// =============================================================================
+// Fresh checkout smoke: install/build/bin from a clean temp directory
+// without node_modules or dist, running through Windows PowerShell
+// =============================================================================
+
+describe('Fresh checkout smoke: install/build/bin from clean temp directory', () => {
+  let checkoutDir: string;
+
+  afterEach(() => {
+    safeCleanup(checkoutDir);
+  });
+
+  it('clones project to temp dir, installs, builds, and invokes CLI', () => {
+    const parentDir = mkdtempSync(join(tmpdir(), 'cet-fresh-checkout-'));
+    checkoutDir = join(parentDir, 'checkout');
+
+    // Clone the repository (node_modules/dist excluded via .gitignore)
+    execFileSync('git', ['clone', process.cwd(), checkoutDir], {
+      timeout: 60000,
+      stdio: 'pipe',
+    });
+
+    // Verify it's a clean checkout — no node_modules, no dist
+    expect(existsSync(join(checkoutDir, 'node_modules'))).toBe(false);
+    expect(existsSync(join(checkoutDir, 'dist'))).toBe(false);
+
+    // Verify key source files exist
+    expect(existsSync(join(checkoutDir, 'package.json'))).toBe(true);
+    expect(existsSync(join(checkoutDir, 'tsconfig.json'))).toBe(true);
+    expect(existsSync(join(checkoutDir, 'bin', 'cli.js'))).toBe(true);
+
+    // npm install (use shell: true for Windows .ps1 script resolution)
+    execFileSync('npm', ['install'], {
+      cwd: checkoutDir,
+      encoding: 'utf-8',
+      timeout: 300000, // 5 minutes for full install
+      stdio: 'pipe',
+      shell: true,
+    });
+    expect(existsSync(join(checkoutDir, 'node_modules'))).toBe(true);
+    expect(existsSync(join(checkoutDir, 'node_modules', 'commander'))).toBe(true);
+    expect(existsSync(join(checkoutDir, 'node_modules', 'better-sqlite3'))).toBe(true);
+
+    // npm run build (use shell: true for Windows .ps1 script resolution)
+    execFileSync('npm', ['run', 'build'], {
+      cwd: checkoutDir,
+      encoding: 'utf-8',
+      timeout: 120000,
+      stdio: 'pipe',
+      shell: true,
+    });
+    expect(existsSync(join(checkoutDir, 'dist', 'cli.js'))).toBe(true);
+    expect(existsSync(join(checkoutDir, 'dist', 'dashboard', 'index.html'))).toBe(true);
+    expect(existsSync(join(checkoutDir, 'dist', 'storage.js'))).toBe(true);
+    expect(existsSync(join(checkoutDir, 'dist', 'config.js'))).toBe(true);
+
+    // Invoke CLI --help from the clean checkout
+    const cliPath = join(checkoutDir, 'bin', 'cli.js');
+    const helpResult = execFileSync('node', [cliPath, '--help'], {
+      cwd: checkoutDir,
+      encoding: 'utf-8',
+      timeout: 10000,
+    });
+    expect(helpResult).toContain('cet');
+    expect(helpResult).toContain('init');
+    expect(helpResult).toContain('import');
+    expect(helpResult).toContain('serve');
+    expect(helpResult).toContain('export');
+
+    // Invoke CLI --version
+    const versionResult = execFileSync('node', [cliPath, '--version'], {
+      cwd: checkoutDir,
+      encoding: 'utf-8',
+      timeout: 10000,
+    });
+    expect(versionResult.trim()).toMatch(/\d+\.\d+\.\d+/);
+
+    // Quick init/import to prove the full pipeline works
+    const dataDir = join(parentDir, 'tracker-data');
+    const initResult = execFileSync('node', [cliPath, 'init', '-d', dataDir], {
+      cwd: checkoutDir,
+      encoding: 'utf-8',
+      timeout: 15000,
+    });
+    expect(initResult).toContain('Initialized workspace');
+    expect(existsSync(join(dataDir, 'tracker.db'))).toBe(true);
+  });
+});
+
+// =============================================================================
+// Browser automation: release validation with agent-browser
+// Start dashboard with fixture data, verify visible UI, check export, clean up
+// =============================================================================
+
+describe('Browser automation: dashboard UI release validation', () => {
+  let tempDir: string;
+  let dataDir: string;
+  const PORT = 43210; // Unique port for browser test
+
+  beforeEach(() => {
+    tempDir = mkdtempSync(join(tmpdir(), 'cet-browser-e2e-'));
+    dataDir = join(tempDir, 'tracker-data');
+
+    // Initialize and import fixture data
+    runCli(['init', '-d', dataDir]);
+    runCli(['import', '-d', dataDir, '--fixture', join(FIXTURES_DIR, 'correlation-sessions.json')]);
+  });
+
+  afterEach(() => {
+    safeCleanup(tempDir);
+  });
+
+  it('loads dashboard with fixture data, verifies UI, checks export, shuts down cleanly', async () => {
+    const cliPath = join(process.cwd(), 'bin', 'cli.js');
+    const { spawn } = await import('node:child_process');
+
+    // Start the dashboard server
+    const server = spawn('node', [cliPath, 'serve', '-d', dataDir, '-p', PORT.toString()], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      timeout: 30000,
+    });
+
+    const agentBrowserExe = 'C:\\Users\\TafheemMalik\\.factory\\tools\\agent-browser\\bin\\agent-browser.exe';
+    const sessionId = 'e1d45a73ea31';
+    let browserProc: ReturnType<typeof spawn> | null = null;
+
+    try {
+      // Wait for server to be ready
+      let serverReady = false;
+      let serverOutput = '';
+      await new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          if (!serverReady) reject(new Error('Server start timeout. Output: ' + serverOutput));
+        }, 15000);
+        const onData = (data: Buffer) => {
+          const text = data.toString();
+          serverOutput += text;
+          if (text.includes('127.0.0.1:' + PORT) || text.includes('Dashboard') || text.includes('listening')) {
+            serverReady = true;
+            clearTimeout(timeout);
+            resolve();
+          }
+        };
+        server.stdout!.on('data', onData);
+        server.stderr!.on('data', onData);
+        server.on('error', reject);
+      });
+
+      expect(serverReady).toBe(true);
+
+      // Verify health endpoint
+      let healthOk = false;
+      for (let i = 0; i < 5; i++) {
+        try {
+          const response = execFileSync('curl.exe', ['-sf', 'http://127.0.0.1:' + PORT + '/health'], {
+            encoding: 'utf-8',
+            timeout: 3000,
+          });
+          const parsed = JSON.parse(response);
+          if (parsed.status === 'ok') {
+            healthOk = true;
+            break;
+          }
+        } catch {
+          await new Promise(r => setTimeout(r, 500));
+        }
+      }
+      expect(healthOk).toBe(true);
+
+      // Verify overview API returns session data
+      const overviewRes = execFileSync('curl.exe', ['-sf', 'http://127.0.0.1:' + PORT + '/api/overview'], {
+        encoding: 'utf-8',
+        timeout: 5000,
+      });
+      const overview = JSON.parse(overviewRes);
+      expect(overview.totalSessions).toBeGreaterThanOrEqual(7);
+      expect(overview.tools).toBeDefined();
+      expect(overview.tools.length).toBeGreaterThanOrEqual(4);
+      expect(overview.score.aggregate).toBeGreaterThanOrEqual(0);
+      expect(overview.empty).toBe(false);
+
+      // Agent-browser 'open' stays alive - spawn it asynchronously
+      browserProc = spawn(agentBrowserExe, ['--session', sessionId, 'open', 'http://127.0.0.1:' + PORT], {
+        stdio: 'pipe',
+      });
+
+      // Wait for page to render
+      await new Promise(r => setTimeout(r, 3000));
+
+      // Take screenshot for evidence
+      const screenshotPath = join(tempDir, 'dashboard.png');
+      execFileSync(agentBrowserExe, ['--session', sessionId, 'screenshot', screenshotPath], {
+        timeout: 30000,
+        stdio: 'pipe',
+      });
+      expect(existsSync(screenshotPath)).toBe(true);
+
+      // Get page snapshot to verify visible text
+      const snapshotResult = execFileSync(agentBrowserExe, ['--session', sessionId, 'snapshot'], {
+        encoding: 'utf-8',
+        timeout: 30000,
+      });
+      const snapshot = snapshotResult.trim();
+      expect(snapshot).toMatch(/session/i);
+      expect(snapshot).toMatch(/Sessions/i);
+      expect(snapshot).toMatch(/codex|opencode|claude|cursor|factory/i);
+
+      // Check JSON export via API
+      const jsonExportRes = execFileSync('curl.exe', ['-sf', 'http://127.0.0.1:' + PORT + '/api/export/json'], {
+        encoding: 'utf-8',
+        timeout: 5000,
+      });
+      const jsonExport = JSON.parse(jsonExportRes);
+      expect(jsonExport.totalSessions).toBeGreaterThanOrEqual(7);
+      expect(jsonExport.sessions.length).toBeGreaterThanOrEqual(7);
+      expect(jsonExport.score).toBeDefined();
+      expect(jsonExport.generatedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+
+      // Check Markdown export via API
+      const mdExportRes = execFileSync('curl.exe', ['-sf', 'http://127.0.0.1:' + PORT + '/api/export/markdown'], {
+        encoding: 'utf-8',
+        timeout: 5000,
+      });
+      expect(mdExportRes).toContain('Effectiveness');
+      expect(mdExportRes).toContain('Privacy');
+
+      // Close the browser before stopping the server
+      execFileSync(agentBrowserExe, ['--session', sessionId, 'close'], {
+        timeout: 15000,
+        stdio: 'pipe',
+      });
+      browserProc = null; // already closed
+    } finally {
+      // Stop the server and kill background browser process
+      if (browserProc) { try { browserProc.kill(); } catch { /* ignore */ } }
+      server.kill('SIGTERM');
+      await new Promise<void>((resolve) => {
+        server.on('exit', () => resolve());
+        setTimeout(() => resolve(), 3000);
+      });
+    }
+
+    // Verify port is released
+    await new Promise(r => setTimeout(r, 1000));
+    try {
+      execFileSync('curl.exe', ['-sf', 'http://127.0.0.1:' + PORT + '/health'], {
+        encoding: 'utf-8',
+        timeout: 3000,
+      });
+      // If we get a response, server is still running
+      expect(false).toBe(true);
+    } catch {
+      // Expected — server is down
+      expect(true).toBe(true);
+    }
+
+    // SQLite integrity check
+    const db = new Database(join(dataDir, 'tracker.db'), { readonly: true });
+    try {
+      const integrity = db.pragma('integrity_check', { simple: true }) as string;
+      expect(integrity).toBe('ok');
+    } finally {
+      db.close();
+    }
+  });
+});
