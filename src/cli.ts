@@ -4,6 +4,8 @@ import { handleInit } from './commands/init.js';
 import { handleImport } from './commands/import.js';
 import { handleReport } from './commands/report.js';
 import { handleAnnotate } from './commands/annotate.js';
+import { handleSync } from './commands/sync.js';
+import { handleTestOutcome } from './commands/test-outcome.js';
 
 // Ensure all importers are registered
 import './importers/index.js';
@@ -60,6 +62,30 @@ program
   .action(handleAnnotate);
 
 program
+  .command('sync')
+  .description('Sync local Git repository commits and correlate with imported sessions (local-only, no remote calls)')
+  .option('-d, --data-dir <path>', 'Custom data directory path')
+  .option('-r, --repo <path>', 'Path to local Git repository (required)')
+  .option('-p, --project <id>', 'Project ID (defaults to repo directory name)')
+  .action(handleSync);
+
+program
+  .command('test-outcome')
+  .description('Ingest local test result artifacts or command outcome records and correlate with sessions (local-only)')
+  .option('-d, --data-dir <path>', 'Custom data directory path')
+  .option('-p, --project <id>', 'Project ID (default: "default")')
+  .option('--outcome-json <path>', 'JSON file with array of test outcome records')
+  .option('--command <str>', 'Test command name')
+  .option('--passed <n>', 'Number of passed tests')
+  .option('--failed <n>', 'Number of failed tests')
+  .option('--skipped <n>', 'Number of skipped tests')
+  .option('--duration <ms>', 'Duration in milliseconds')
+  .option('--run-at <datetime>', 'ISO datetime of the test run (default: now)')
+  .option('--session <id>', 'Session ID to link outcome to')
+  .option('--commit <hash>', 'Commit hash to link outcome to')
+  .action(handleTestOutcome);
+
+program
   .command('serve')
   .description('Start the local dashboard and API server')
   .option('-d, --data-dir <path>', 'Custom data directory path')
@@ -83,4 +109,3 @@ export { program };
 if (process.argv[1]?.endsWith('cli.ts') || process.argv[1]?.endsWith('cli.js')) {
   program.parse(process.argv);
 }
-
