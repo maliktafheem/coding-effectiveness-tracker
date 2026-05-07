@@ -103,7 +103,13 @@ export function registerRoutes(app: FastifyInstance, opts: ServerOptions): void 
         toolId: filters.tool, projectId: filters.project,
         from: filters.from, to: filters.to,
       });
-      const outcomeCount = (db.prepare('SELECT count(*) as cnt FROM outcomes').get() as { cnt: number }).cnt;
+      let ocSql = 'SELECT count(*) as cnt FROM outcomes o JOIN sessions s ON o.session_id = s.id WHERE 1=1';
+      const ocParams: (string|number)[] = [];
+      if (filters.tool) { ocSql += ' AND s.source_tool_id = ?'; ocParams.push(filters.tool); }
+      if (filters.project) { ocSql += ' AND s.project_id = ?'; ocParams.push(filters.project); }
+      if (filters.from) { ocSql += ' AND s.started_at >= ?'; ocParams.push(filters.from); }
+      if (filters.to) { ocSql += ' AND s.started_at <= ?'; ocParams.push(filters.to); }
+      const outcomeCount = (db.prepare(ocSql).get(...ocParams) as { cnt: number }).cnt;
       return {
         totalSessions: sessions.length, tools,
         dateRange: score.dateRange, outcomeCount,

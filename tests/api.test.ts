@@ -543,6 +543,119 @@ describe('API validation gaps', () => {
       expect(body.totalSessions).toBe(1); // sess2 only
       expect(body.tools).toEqual(['claude-code']);
     });
+
+    // ── Filtered outcomeCount tests ──────────────────────────────────────
+
+    it('outcomeCount counts all outcomes when no filters applied', async () => {
+      const { Storage } = await import('../src/storage.js');
+      const s = Storage.open({ dataDir });
+      seedFixtures(s.dbPath);
+      s.close();
+      server = await createApiServer({ dataDir, port: PORT });
+      const res = await server.inject({ method: 'GET', url: '/api/overview' });
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.payload);
+      // Only sess1 has an outcome (out1), so global outcomeCount is 1
+      expect(body.outcomeCount).toBe(1);
+    });
+
+    it('outcomeCount scopes to tool filter', async () => {
+      const { Storage } = await import('../src/storage.js');
+      const s = Storage.open({ dataDir });
+      seedFixtures(s.dbPath);
+      s.close();
+      server = await createApiServer({ dataDir, port: PORT });
+      // codex has 2 sessions (sess1, sess3), only sess1 has an outcome
+      const res = await server.inject({ method: 'GET', url: '/api/overview?tool=codex' });
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.payload);
+      expect(body.totalSessions).toBe(2);
+      expect(body.outcomeCount).toBe(1);
+    });
+
+    it('outcomeCount scopes to tool filter with no matching outcomes', async () => {
+      const { Storage } = await import('../src/storage.js');
+      const s = Storage.open({ dataDir });
+      seedFixtures(s.dbPath);
+      s.close();
+      server = await createApiServer({ dataDir, port: PORT });
+      // claude-code has 1 session (sess2) with no outcome
+      const res = await server.inject({ method: 'GET', url: '/api/overview?tool=claude-code' });
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.payload);
+      expect(body.totalSessions).toBe(1);
+      expect(body.outcomeCount).toBe(0);
+    });
+
+    it('outcomeCount scopes to project filter', async () => {
+      const { Storage } = await import('../src/storage.js');
+      const s = Storage.open({ dataDir });
+      seedFixtures(s.dbPath);
+      s.close();
+      server = await createApiServer({ dataDir, port: PORT });
+      const res = await server.inject({ method: 'GET', url: '/api/overview?project=proj1' });
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.payload);
+      expect(body.totalSessions).toBe(3);
+      // Only sess1 (in proj1) has an outcome
+      expect(body.outcomeCount).toBe(1);
+    });
+
+    it('outcomeCount scopes to date range filter', async () => {
+      const { Storage } = await import('../src/storage.js');
+      const s = Storage.open({ dataDir });
+      seedFixtures(s.dbPath);
+      s.close();
+      server = await createApiServer({ dataDir, port: PORT });
+      // Only sess1 (2025-01-15) is in this range, and it has an outcome
+      const res = await server.inject({ method: 'GET', url: '/api/overview?from=2025-01-15&to=2025-01-15' });
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.payload);
+      expect(body.totalSessions).toBe(1);
+      expect(body.outcomeCount).toBe(1);
+    });
+
+    it('outcomeCount scopes to date range filter that excludes outcome-carrying sessions', async () => {
+      const { Storage } = await import('../src/storage.js');
+      const s = Storage.open({ dataDir });
+      seedFixtures(s.dbPath);
+      s.close();
+      server = await createApiServer({ dataDir, port: PORT });
+      // sess2 and sess3 (2025-01-16, 2025-01-17) have no outcomes
+      const res = await server.inject({ method: 'GET', url: '/api/overview?from=2025-01-16&to=2025-01-17' });
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.payload);
+      expect(body.totalSessions).toBe(2);
+      expect(body.outcomeCount).toBe(0);
+    });
+
+    it('outcomeCount scopes to combined tool and project filter', async () => {
+      const { Storage } = await import('../src/storage.js');
+      const s = Storage.open({ dataDir });
+      seedFixtures(s.dbPath);
+      s.close();
+      server = await createApiServer({ dataDir, port: PORT });
+      const res = await server.inject({ method: 'GET', url: '/api/overview?tool=codex&project=proj1' });
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.payload);
+      expect(body.totalSessions).toBe(2);
+      expect(body.outcomeCount).toBe(1);
+    });
+
+    it('outcomeCount is 0 when no sessions match filters', async () => {
+      const { Storage } = await import('../src/storage.js');
+      const s = Storage.open({ dataDir });
+      seedFixtures(s.dbPath);
+      s.close();
+      server = await createApiServer({ dataDir, port: PORT });
+      const res = await server.inject({ method: 'GET', url: '/api/overview?tool=nonexistent' });
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.payload);
+      expect(body.totalSessions).toBe(0);
+      expect(body.empty).toBe(true);
+      // outcomeCount should be 0 when no sessions match
+      expect(body.outcomeCount).toBe(0);
+    });
   });
 
   // ── Malformed query parameters ──────────────────────────────────────────
