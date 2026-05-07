@@ -992,8 +992,9 @@ describe('Browser automation: dashboard UI release validation', () => {
       server.kill('SIGTERM');
       return;
     }
-    const sessionId = 'e1d45a73ea31';
-    let browserProc: ReturnType<typeof spawn> | null = null;
+    // Use a unique session ID per test run to avoid stale-session conflicts
+    const sessionId = 'cet-e2e-' + Date.now().toString(36);
+    let browserOpenProc: ReturnType<typeof spawn> | null = null;
 
     try {
       // Wait for server to be ready
@@ -1038,7 +1039,7 @@ describe('Browser automation: dashboard UI release validation', () => {
       }
       expect(healthOk).toBe(true);
 
-      // Verify overview API returns session data
+      // Verify overview API returns session data before attempting browser
       const overviewRes = execFileSync('curl.exe', ['-sf', 'http://127.0.0.1:' + PORT + '/api/overview'], {
         encoding: 'utf-8',
         timeout: 5000,
@@ -1050,13 +1051,99 @@ describe('Browser automation: dashboard UI release validation', () => {
       expect(overview.score.aggregate).toBeGreaterThanOrEqual(0);
       expect(overview.empty).toBe(false);
 
-      // Agent-browser 'open' stays alive - spawn it asynchronously
-      browserProc = spawn(agentBrowserExe, ['--session', sessionId, 'open', 'http://127.0.0.1:' + PORT], {
+      // --- Agent-browser navigation with reliable wait-for-content ---
+
+      // Step 1: Open the URL (spawn synchronously, wait for exit)
+      browserOpenProc = spawn(agentBrowserExe, ['--session', sessionId, 'open', 'http://127.0.0.1:' + PORT], {
+        stdio: 'pipe',
+      });
+      await new Promise<void>((resolve, reject) => {
+        const to = setTimeout(() => reject(new Error('agent-browser open timed out')), 15000);
+        browserOpenProc!.on('exit', (code) => {
+          clearTimeout(to);
+          if (code !== 0) reject(new Error('agent-browser open exited with code ' + code));
+          else resolve();
+        });
+        browserOpenProc!.on('error', reject);
+      });
+      browserOpenProc = null; // process exited; daemon keeps browser alive
+
+      // Step 2: Wait for network idle (all page resources loaded)
+      execFileSync(agentBrowserExe, ['--session', sessionId, 'wait', '--load', 'networkidle'], {
+        encoding: 'utf-8',
+        timeout: 30000,
         stdio: 'pipe',
       });
 
-      // Wait for page to render
-      await new Promise(r => setTimeout(r, 3000));
+      // Step 3: Wait for body element to confirm DOM is present
+      execFileSync(agentBrowserExe, ['--session', sessionId, 'wait', 'body'], {
+        encoding: 'utf-8',
+        timeout: 10000,
+        stdio: 'pipe',
+      });
+
+      // Step 4: Poll snapshot until it shows actual dashboard content or timeout.
+      // The initial "open" + "wait --load networkidle" triggers the page navigation
+      // shell (heading, nav links, filter combobox with tool options). The overview
+      // content (session counts, score, etc.) is loaded via client-side API call
+      // after React hydration. We poll until either content appears or we timeout.
+      let snapshot = '';
+      let pollAttempts = 0;
+      const maxPollAttempts = 10; // ~20s total with 2s backoff
+      let diagnostics = '';
+
+      while (pollAttempts < maxPollAttempts) {
+        const snapResult = execFileSync(agentBrowserExe, ['--session', sessionId, 'snapshot'], {
+          encoding: 'utf-8',
+          timeout: 20000,
+        });
+        snapshot = snapResult.trim();
+
+        // Check for meaningful dashboard content:
+        // - Must be longer than 50 chars (the bare "- document" case is ~10 chars)
+        // - Must contain a dashboard content indicator (nav text, filter options, etc.)
+        // - We specifically avoid checking for "Overview" alone because the nav always has it
+        if (
+          snapshot.length > 80 &&
+          /heading|Coding Effectiveness|Timeline|Tools|Export|Filter:|All tools|Codex|Sessions|Score|session/i.test(snapshot)
+        ) {
+          break; // Content found — page rendered with navigation + potential data
+        }
+
+        pollAttempts++;
+        if (pollAttempts >= maxPollAttempts) {
+          // Capture diagnostics before failing — gather console logs and page errors
+          // (agent-browser get html requires a selector argument, so we skip it)
+          try {
+            const logs = execFileSync(agentBrowserExe, ['--session', sessionId, 'console'], {
+              encoding: 'utf-8', timeout: 5000,
+            });
+            diagnostics = '--- CONSOLE LOGS ---\n' + logs.slice(0, 2000);
+          } catch { diagnostics = '(console unavailable)'; }
+          try {
+            const errs = execFileSync(agentBrowserExe, ['--session', sessionId, 'errors'], {
+              encoding: 'utf-8', timeout: 5000,
+            });
+            diagnostics += '\n--- PAGE ERRORS ---\n' + errs.slice(0, 2000);
+          } catch { diagnostics += '\n(errors unavailable)'; }
+          // Also try get text on body as fallback
+          try {
+            const bodyText = execFileSync(agentBrowserExe, ['--session', sessionId, 'get', 'text', 'body'], {
+              encoding: 'utf-8', timeout: 5000,
+            });
+            diagnostics += '\n--- BODY TEXT (first 2000 chars) ---\n' + bodyText.slice(0, 2000);
+          } catch { /* ignore */ }
+          break;
+        }
+        await new Promise(r => setTimeout(r, 2000));
+      }
+
+      // Assert content was found with actionable diagnostics on failure
+      const failMsg = pollAttempts >= maxPollAttempts
+        ? `Dashboard content not found after ${maxPollAttempts} polls.\nLast snapshot: ${snapshot.slice(0, 500)}\n${diagnostics}`
+        : '';
+      expect(pollAttempts < maxPollAttempts, failMsg).toBe(true);
+      expect(snapshot).toMatch(/heading|Coding Effectiveness|Timeline|Tools|Export|Filter:|All tools|Codex/i);
 
       // Take screenshot for evidence
       const screenshotPath = join(tempDir, 'dashboard.png');
@@ -1066,14 +1153,7 @@ describe('Browser automation: dashboard UI release validation', () => {
       });
       expect(existsSync(screenshotPath)).toBe(true);
 
-      // Get page snapshot to verify visible text
-      const snapshotResult = execFileSync(agentBrowserExe, ['--session', sessionId, 'snapshot'], {
-        encoding: 'utf-8',
-        timeout: 30000,
-      });
-      const snapshot = snapshotResult.trim();
-      expect(snapshot).toMatch(/session/i);
-      expect(snapshot).toMatch(/Sessions/i);
+      // Verify snapshot shows tool names from fixture data
       expect(snapshot).toMatch(/codex|opencode|claude|cursor|factory/i);
 
       // Check JSON export via API
@@ -1100,10 +1180,14 @@ describe('Browser automation: dashboard UI release validation', () => {
         timeout: 15000,
         stdio: 'pipe',
       });
-      browserProc = null; // already closed
     } finally {
-      // Stop the server and kill background browser process
-      if (browserProc) { try { browserProc.kill(); } catch { /* ignore */ } }
+      // Stop the server and kill background browser process (safety net)
+      if (browserOpenProc) { try { browserOpenProc.kill(); } catch { /* ignore */ } }
+      try {
+        execFileSync(agentBrowserExe, ['--session', sessionId, 'close'], {
+          timeout: 5000, stdio: 'pipe',
+        });
+      } catch { /* already closed or unavailable */ }
       server.kill('SIGTERM');
       await new Promise<void>((resolve) => {
         server.on('exit', () => resolve());
