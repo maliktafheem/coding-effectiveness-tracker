@@ -23,7 +23,7 @@ jobs:
       - run: npm run build
       - run: npm run typecheck
       - run: npm run lint
-      - run: npm test
+      - run: npm run test:unit
       - name: E2E tests (Windows only)
         if: runner.os == 'Windows'
         run: npm run test:e2e

@@ -956,7 +956,10 @@ describe('Fresh checkout smoke: install/build/bin from clean temp directory', ()
 // Start dashboard with fixture data, verify visible UI, check export, clean up
 // =============================================================================
 
-describe('Browser automation: dashboard UI release validation', () => {
+// Skip agent-browser tests when running in CI (agent-browser is not available)
+const describeBrowser = process.env.CI ? describe.skip : describe;
+
+describeBrowser('Browser automation: dashboard UI release validation', () => {
   let tempDir: string;
   let dataDir: string;
   const PORT = 43210; // Unique port for browser test
