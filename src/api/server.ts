@@ -35,6 +35,17 @@ export async function createApiServer(opts: ServerOptions): Promise<DashboardSer
     trustProxy: false,
   });
 
+  // Consistent JSON error handler for all unhandled errors
+  app.setErrorHandler(async (error, _request, reply) => {
+    const err = error as { statusCode?: number; message?: string };
+    const statusCode = err.statusCode ?? 500;
+    if (statusCode === 500) {
+      console.error('Unhandled error:', error);
+    }
+    const message = statusCode === 500 ? 'Internal server error' : (err.message ?? 'Unknown error');
+    return reply.code(statusCode).send({ error: 'Internal server error', message });
+  });
+
   // Cross-origin protection middleware
   app.addHook('onRequest', async (request, reply) => {
     const origin = request.headers.origin;

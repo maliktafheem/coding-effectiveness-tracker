@@ -282,7 +282,31 @@ function printResult(toolName: string, sourcePath: string, result: ImportResult,
 
 function getDefaultSourcePaths(): string[] {
   const home = process.env.HOME || process.env.USERPROFILE || '';
-  const appData = process.env.APPDATA || join(home, 'AppData', 'Roaming');
+  const isWin32 = process.platform === 'win32';
+
+  if (isWin32) {
+    const appData = process.env.APPDATA || join(home, 'AppData', 'Roaming');
+    return [
+      // Claude Code
+      join(home, '.claude'),
+      join(home, '.claude', 'projects'),
+      // Codex
+      join(home, '.codex'),
+      join(home, '.codex', 'sessions'),
+      // OpenCode
+      join(appData, 'opencode'),
+      // Factory Droid
+      join(home, '.factory'),
+      join(home, '.factory', 'sessions'),
+      // Cursor
+      join(appData, 'Cursor'),
+      join(home, '.cursor'),
+    ];
+  }
+
+  // Linux/macOS: use XDG base directory specification
+  const xdgConfigHome = process.env.XDG_CONFIG_HOME || join(home, '.config');
+  const xdgDataHome = process.env.XDG_DATA_HOME || join(home, '.local', 'share');
 
   return [
     // Claude Code
@@ -292,12 +316,13 @@ function getDefaultSourcePaths(): string[] {
     join(home, '.codex'),
     join(home, '.codex', 'sessions'),
     // OpenCode
-    join(appData, 'opencode'),
+    join(xdgConfigHome, 'opencode'),
+    join(xdgDataHome, 'opencode'),
     // Factory Droid
     join(home, '.factory'),
     join(home, '.factory', 'sessions'),
     // Cursor
-    join(appData, 'Cursor'),
+    join(xdgConfigHome, 'Cursor'),
     join(home, '.cursor'),
   ];
 }

@@ -728,11 +728,14 @@ describe('Package/bin behavior on Windows PowerShell', () => {
   });
 });
 
+// Skip platform-specific tests on non-Windows (pwsh, curl.exe, agent-browser)
+const describeWin32 = process.platform === 'win32' ? describe : describe.skip;
+
 // =============================================================================
 // Server process lifecycle (no orphan processes)
 // =============================================================================
 
-describe('Server process lifecycle', () => {
+describeWin32('Server process lifecycle', () => {
   let tempDir: string;
   let dataDir: string;
 
@@ -869,7 +872,7 @@ describe('Server process lifecycle', () => {
 // without node_modules or dist, running through Windows PowerShell
 // =============================================================================
 
-describe('Fresh checkout smoke: install/build/bin from clean temp directory', () => {
+describeWin32('Fresh checkout smoke: install/build/bin from clean temp directory', () => {
   let checkoutDir: string;
 
   afterEach(() => {
@@ -957,7 +960,7 @@ describe('Fresh checkout smoke: install/build/bin from clean temp directory', ()
 // =============================================================================
 
 // Skip agent-browser tests when running in CI (agent-browser is not available)
-const describeBrowser = process.env.CI ? describe.skip : describe;
+const describeBrowser = (process.env.CI || process.platform !== 'win32') ? describe.skip : describe;
 
 describeBrowser('Browser automation: dashboard UI release validation', () => {
   let tempDir: string;

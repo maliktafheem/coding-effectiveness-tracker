@@ -4,12 +4,28 @@ import { resolveDataDir, isInitialized } from '../config.js';
 import { Storage } from '../storage.js';
 import { computeEffectivenessScore } from '../scoring/effectiveness.js';
 import { randomUUID } from 'node:crypto';
+import { z } from 'zod';
 import { generateJsonExport, generateMarkdownExport } from './export.js';
 
 const VALID_OUTCOMES = new Set([
   'good','accepted','merged','shipped','ok','neutral','partial',
   'poor','rejected','reverted','abandoned','unknown',
 ]);
+
+// Zod schemas for annotation request validation
+const annotationPostBodySchema = z.object({
+  outcome: z.string().min(1, 'Outcome is required and must be a non-empty string'),
+  score: z.number().min(0).max(1).optional().nullable(),
+  note: z.string().optional().nullable(),
+  tags: z.any().optional().nullable(),
+});
+
+const annotationPatchBodySchema = z.object({
+  outcome: z.string().min(1, 'Outcome must be a non-empty string if provided.').optional().nullable(),
+  score: z.number().min(0).max(1).optional().nullable(),
+  note: z.string().optional().nullable(),
+  tags: z.any().optional().nullable(),
+});
 
 /** Parse date param — returns ISO string or null. Validates format. */
 function parseDateParam(val: string | undefined): string | null {
@@ -279,11 +295,23 @@ export function registerRoutes(app: FastifyInstance, opts: ServerOptions): void 
 
   app.post('/api/sessions/:id/annotations', async (request, reply) => {
     const { id } = request.params as { id: string };
-    const body = request.body as Record<string, unknown>;
-    if (!body.outcome || typeof body.outcome !== 'string' || body.outcome.trim() === '') {
-      return reply.code(400).send({ error: 'Outcome is required and must be a non-empty string' });
+    if (!id || typeof id !== 'string' || id.trim() === '') {
+      return reply.code(400).send({ error: 'Session ID is required' });
     }
-    const outcome = (body.outcome as string).toLowerCase().trim();
+    const parsed = annotationPostBodySchema.safeParse(request.body);
+    if (!parsed.success) {
+      const issue = parsed.error.issues[0];
+      const path = issue.path.join('.');
+      if (path === 'outcome') {
+        return reply.code(400).send({ error: 'Outcome is required and must be a non-empty string' });
+      }
+      if (path === 'score') {
+        return reply.code(400).send({ error: 'Score must be between 0 and 1' });
+      }
+      return reply.code(400).send({ error: issue.message });
+    }
+    const body = parsed.data;
+    const outcome = body.outcome.toLowerCase().trim();
     if (!VALID_OUTCOMES.has(outcome)) {
       return reply.code(400).send({ error: 'Invalid outcome. Accepted: ' + Array.from(VALID_OUTCOMES).join(', ') });
     }
@@ -293,12 +321,9 @@ export function registerRoutes(app: FastifyInstance, opts: ServerOptions): void 
       const db = storage.db;
       const session = db.prepare('SELECT id FROM sessions WHERE id = ?').get(id);
       if (!session) return reply.code(404).send({ error: 'Session not found' });
-      if (typeof body.score === 'number' && (body.score < 0 || body.score > 1)) {
-        return reply.code(400).send({ error: 'Score must be between 0 and 1' });
-      }
       const annId = randomUUID();
-      const note = typeof body.note === 'string' ? body.note : null;
-      const score = typeof body.score === 'number' ? body.score : null;
+      const note = body.note ?? null;
+      const score = body.score ?? null;
       const tagsJson = body.tags ? JSON.stringify(body.tags) : null;
       db.prepare(
         'INSERT INTO outcomes (id, session_id, outcome_type, score, label, note, tags_json) VALUES (?, ?, ?, ?, ?, ?, ?)'
@@ -312,7 +337,6 @@ export function registerRoutes(app: FastifyInstance, opts: ServerOptions): void 
 
   app.patch('/api/annotations/:id', async (request, reply) => {
     const { id } = request.params as { id: string };
-    const body = request.body as Record<string, unknown>;
     if (!isInitialized(dataDir)) return reply.code(503).send({ error: 'Not initialized' });
     const storage = Storage.open({ dataDir });
     try {
@@ -320,26 +344,32 @@ export function registerRoutes(app: FastifyInstance, opts: ServerOptions): void 
       const existing = db.prepare('SELECT * FROM outcomes WHERE id = ?').get(id) as Record<string, unknown> | undefined;
       if (!existing) return reply.code(404).send({ error: 'Annotation not found' });
 
-      // Validate score BEFORE any mutation — if invalid, return error without changing anything
-      if (body.score !== undefined && body.score !== null) {
-        if (typeof body.score !== 'number' || body.score < 0 || body.score > 1) {
+      // Validate body with Zod schema before any mutation
+      const parsed = annotationPatchBodySchema.safeParse(request.body);
+      if (!parsed.success) {
+        const issue = parsed.error.issues[0];
+        const path = issue.path.join('.');
+        if (path === 'score') {
           return reply.code(400).send({ error: 'Score must be a number between 0 and 1.' });
         }
-      }
-      // Validate outcome if provided
-      if (body.outcome !== undefined && body.outcome !== null) {
-        if (typeof body.outcome !== 'string' || body.outcome.trim() === '') {
+        if (path === 'outcome') {
           return reply.code(400).send({ error: 'Outcome must be a non-empty string if provided.' });
         }
-        const outcomeVal = (body.outcome as string).toLowerCase().trim();
+        return reply.code(400).send({ error: issue.message });
+      }
+      const body = parsed.data;
+
+      // Validate outcome against allowed set if provided
+      if (body.outcome !== undefined && body.outcome !== null) {
+        const outcomeVal = body.outcome.toLowerCase().trim();
         if (!VALID_OUTCOMES.has(outcomeVal)) {
           return reply.code(400).send({ error: 'Invalid outcome. Accepted: ' + Array.from(VALID_OUTCOMES).join(', ') });
         }
       }
 
-      const outcome = typeof body.outcome === 'string' ? body.outcome.toLowerCase().trim() : (existing.label as string);
-      const score = typeof body.score === 'number' ? body.score : (existing.score as number | null);
-      const note = typeof body.note === 'string' ? body.note : (existing.note as string | null);
+      const outcome = body.outcome ? body.outcome.toLowerCase().trim() : (existing.label as string);
+      const score = body.score ?? (existing.score as number | null);
+      const note = body.note ?? (existing.note as string | null);
       db.prepare('UPDATE outcomes SET label = ?, score = ?, note = ?, updated_at = datetime(\'now\') WHERE id = ?')
         .run(outcome, score, note, id);
       return { id, sessionId: existing.session_id, outcome, score, note };
