@@ -154,6 +154,23 @@ Use query filters such as `tool`, `project`, `from`, `to`, and `raw=true` where 
 
 For detailed API reference, see [docs/api-reference.md](docs/api-reference.md).
 
+## Dashboard Screenshots
+
+<p align="center">
+  <img src="docs/assets/screenshot-overview.png" alt="Dashboard Overview" width="700">
+  <br><em>Overview page — aggregate score, session stats, and score dimensions</em>
+</p>
+
+<p align="center">
+  <img src="docs/assets/screenshot-Timeline.png" alt="Dashboard Timeline" width="700">
+  <br><em>Timeline page — session history with correlation and outcome data</em>
+</p>
+
+<p align="center">
+  <img src="docs/assets/screenshot-Tools.png" alt="Dashboard Tools" width="700">
+  <br><em>Tools page — per-tool comparison of sessions, annotations, and effectiveness scores</em>
+</p>
+
 ## Data Directory
 
 By default, tracker data is stored in `%LOCALAPPDATA%\coding-effectiveness-tracker` on Windows and `~/.coding-effectiveness-tracker` on other platforms. Override this with `--data-dir <path>` or the `CET_DATA_DIR` environment variable. The data directory contains the local SQLite database plus importer, export, and correlation subdirectories.
