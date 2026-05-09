@@ -585,3 +585,35 @@ cet trends
 # Weekly trends for a specific project
 cet trends --project my-app
 ```
+
+---
+
+### `cet tag`
+
+Tag sessions with labels for filtering and organization.
+
+```
+cet tag [options]
+```
+
+**Options:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `-d, --data-dir <path>` | string | — | Custom data directory path |
+| `--session <id>` | string | **required** | Session ID to tag |
+| `--tags <tags>` | string | — | Comma-separated tags |
+| `--remove` | boolean | false | Remove the specified tags instead of adding |
+| `--list` | boolean | false | List current tags on the session |
+
+**Examples:**
+```bash
+# Add tags to a session
+cet tag --session abc-123 --tags "exploratory,feature"
+
+# List current tags
+cet tag --session abc-123 --list
+
+# Remove tags
+cet tag --session abc-123 --tags "exploratory" --remove
+```

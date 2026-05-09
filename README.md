@@ -181,6 +181,7 @@ cet serve
 | `cet test-outcome [--outcome-json <path>] [--command <str>] [--passed <n>] [--failed <n>] [--skipped <n>] [--duration <ms>]` | Ingest local test result artifacts or command outcome records. |
 | `cet compare [--tool <id>] [--from <date>] [--to <date>] vs [--tool <id>] [--from <date>] [--to <date>]` | Compare sessions, tools, or time periods. |
 | `cet trends [--project <id>]` | Show weekly trend analytics with rolling averages. |
+| `cet tag --session <id> [--tags <tags>] [--remove] [--list]` | Add, remove, or list tags on a session for filtering. |
 | `cet annotate --session <id> [--outcome <label>] [--score <number>] [--note <text>] [--tags <tags>]` | Record a manual outcome annotation for a session. |
 | `cet report [--json] [--tool <id>] [--project <id>] [--from <date>] [--to <date>]` | Generate an effectiveness report from imported data. |
 | `cet serve [--port <port>]` | Start the local dashboard and API server on `127.0.0.1`; default port is `43187`. |
