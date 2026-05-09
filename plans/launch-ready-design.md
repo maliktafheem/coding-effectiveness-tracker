@@ -23,7 +23,7 @@ Ordered by risk first, then polish.
 
 ### F2 — N+1 correlation queries in scoring (perf)
 
-**Problem.** `effectiveness.ts:164-168` and `:261-264` run `SELECT count(*) FROM correlations WHERE session_id = ? AND correlation_type = ?` once per session. At 10k sessions, that is 20k prepared statement runs per score computation.
+**Problem.** `effectiveness.ts:164-168` and `:261-264` run `SELECT count(*) FROM correlations WHERE session_id = ? AND correlation_type = ?` once per session. Same N+1 shape also appears in `routes.ts:181` (timeline correlation counts) and `:236-261` (tools outcome/correlation counts). At 10k sessions, scoring alone is 20k prepared statement runs; a dashboard page load multiplies this further.
 
 **Fix.** Replace per-session loop with aggregate scoped to already-filtered session set. Two survival options vs SQLite 999-param IN limit:
 - (preferred) Re-issue the session filter inside the correlation query as subquery/JOIN: `SELECT c.session_id, c.correlation_type, COUNT(*) cnt FROM correlations c JOIN sessions s ON c.session_id = s.id WHERE <same filters> GROUP BY c.session_id, c.correlation_type`. No param explosion.

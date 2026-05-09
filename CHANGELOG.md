@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Dashboard**: Effectiveness trends chart on Overview page (SVG, zero-dep).
+- **CLI**: `cet tag` command for session tagging and filtering.
+- **CLI**: `cet compare` command for per-tool and per-period comparisons.
+- **CLI**: `cet watch` background daemon for polling new sessions and git changes.
+- **Analytics**: `/api/trends` weekly rolling analytics endpoint.
+- **Dashboard**: Dynamic tool dropdown driven by imported data.
+- **Scoring**: Configurable weights and thresholds via `scoring.json` in the data directory.
+- **Correlation**: Branch-aware confidence bonus when a session's commits share one branch.
+- **Plugins**: Importer registration docs and external plugin pattern.
+
+### Changed
+
+- **Importers**: Registry is now authoritative for project identity derivation. Importers no longer set `session.projectId` directly; the registry calls `deriveProjectId(projectPath)` when `metadata.projectPath` is present, preventing collisions between unrelated repositories that share a folder name.
+- **Docs**: `docs/privacy.md` now documents redaction pipeline limitations explicitly (blocklist scope, novel formats, high-entropy free text, `raw=true` export warning).
+
 ## [0.1.0] - 2026-05-07
 
 ### Added
