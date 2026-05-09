@@ -5,7 +5,7 @@
  * Expected structure: JSONL files with session entries.
  *
  * Each line is a JSON object with fields like:
- * - sessionId, type, timestamp, message, model, etc.
+ * - sessionId, type, timestamp, message, model, cwd, etc.
  */
 
 import { existsSync, readdirSync, readFileSync, statSync, lstatSync } from 'node:fs';
@@ -71,7 +71,7 @@ export class ClaudeCodeImporter implements ToolImporter {
 
   private isClaudeFile(filePath: string): boolean {
     const ext = extname(filePath).toLowerCase();
-    if (ext !== '.jsonl' && ext !== '.json') return false;
+    if (ext !== '.jsonl' && ext !== '.json' && ext !== '.log') return false;
     const name = basename(filePath).toLowerCase();
     return name.includes('conversation') || name.includes('claude');
   }
@@ -81,7 +81,7 @@ export class ClaudeCodeImporter implements ToolImporter {
       const entries = readdirSync(dirPath);
       return entries.some((e) => {
         const lower = e.toLowerCase();
-        return lower.includes('claude') && (lower.endsWith('.json') || lower.endsWith('.jsonl'));
+        return lower.includes('claude') && (lower.endsWith('.json') || lower.endsWith('.jsonl') || lower.endsWith('.log'));
       });
     } catch {
       return false;
@@ -112,7 +112,7 @@ export class ClaudeCodeImporter implements ToolImporter {
         } catch { /* skip */ }
       }
     } catch { /* skip */ }
-    // Fallback: read all JSONL/JSON files if no tool-specific files found
+    // Fallback: read all JSONL/JSON/LOG files if no tool-specific files found
     if (files.length === 0) {
       try {
         const entries = safeReadDir(root, dirPath);
@@ -122,7 +122,7 @@ export class ClaudeCodeImporter implements ToolImporter {
             const stat = statSync(fullPath);
             if (stat.isFile()) {
               const ext = extname(entry).toLowerCase();
-              if (ext === '.jsonl' || ext === '.json') files.push(fullPath);
+              if (ext === '.jsonl' || ext === '.json' || ext === '.log') files.push(fullPath);
             }
           } catch { /* skip */ }
         }
@@ -143,7 +143,7 @@ export class ClaudeCodeImporter implements ToolImporter {
       const ext = extname(filePath).toLowerCase();
       let records: Record<string, unknown>[];
 
-      if (ext === '.jsonl') {
+      if (ext === '.jsonl' || ext === '.log') {
         const { records: jsonlRecords, errors } = readJsonl(filePath);
         records = jsonlRecords;
         if (errors.length > 0) {
@@ -177,15 +177,21 @@ export class ClaudeCodeImporter implements ToolImporter {
       for (const [sessionId, messages] of sessionMap) {
         const timestamps = messages.map((m) => m.timestamp as string | undefined).filter(Boolean).sort();
         const models = messages.map((m) => m.model as string | undefined).filter(Boolean);
+        const cwdPaths = messages.map((m) => m.cwd as string | undefined).filter(Boolean);
+        const projectPath = cwdPaths[0];
 
         result.sessions.push({
           externalId: sessionId,
           sourceToolId: this.toolId,
+          projectId: projectPath ? projectPath.split(/[/\\]/).pop() : undefined,
           startedAt: timestamps[0],
           endedAt: timestamps.length > 1 ? timestamps[timestamps.length - 1] : undefined,
           summary: this.extractSummary(messages),
           model: models[0],
-          metadata: { messageCount: messages.length },
+          metadata: {
+            messageCount: messages.length,
+            ...(projectPath ? { projectPath } : {}),
+          },
           events: messages.map((m) => ({
             eventType: (m.type as string) || 'message',
             occurredAt: m.timestamp as string | undefined,
@@ -201,12 +207,10 @@ export class ClaudeCodeImporter implements ToolImporter {
   }
 
   private extractSummary(messages: Record<string, unknown>[]): string | undefined {
-    for (const msg of messages) {
-      if (msg.type === 'human' || msg.type === 'user') {
-        const content = msg.content || msg.message || msg.text;
-        if (typeof content === 'string' && content.length > 0) return content.slice(0, 200);
-      }
-    }
-    return `${messages.length} messages in Claude Code session`;
+    const models = [...new Set(messages.map((m) => m.model as string | undefined).filter(Boolean))];
+    const types = [...new Set(messages.map((m) => m.type as string | undefined).filter(Boolean))];
+    const modelStr = models.length > 0 ? models.join(', ') : 'unknown model';
+    const typeStr = types.length > 0 ? types.join(', ') : 'assistant';
+    return `${messages.length}-message Claude Code session (model: ${modelStr}, types: ${typeStr})`;
   }
 }

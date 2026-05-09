@@ -1,11 +1,12 @@
 /**
  * OpenCode local filesystem importer.
  *
- * OpenCode stores session data in %APPDATA%/opencode on Windows.
+ * OpenCode stores session data in ~/.opencode (macOS/Linux) or
+ * %APPDATA%/opencode (Windows).
  * Expected structure: JSON files with session entries.
  *
  * Each record typically has fields like:
- * - id, session_id, role, content, model, timestamp, tokens, etc.
+ * - id, session_id, role, content, model, timestamp, tokens, cwd, etc.
  */
 
 import { existsSync, readdirSync, readFileSync, statSync, lstatSync } from 'node:fs';
@@ -27,7 +28,7 @@ export class OpenCodeImporter implements ToolImporter {
         return this.isOpenCodeFile(sourcePath);
       }
       const dirName = basename(sourcePath).toLowerCase();
-      if (dirName === 'opencode') return true;
+      if (dirName === 'opencode' || dirName === '.opencode') return true;
       return this.hasOpenCodeFiles(sourcePath);
     } catch {
       return false;
@@ -71,7 +72,7 @@ export class OpenCodeImporter implements ToolImporter {
 
   private isOpenCodeFile(filePath: string): boolean {
     const ext = extname(filePath).toLowerCase();
-    if (ext !== '.json' && ext !== '.jsonl') return false;
+    if (ext !== '.json' && ext !== '.jsonl' && ext !== '.log') return false;
     const name = basename(filePath).toLowerCase();
     return name.includes('opencode') || name.includes('conversation');
   }
@@ -79,7 +80,11 @@ export class OpenCodeImporter implements ToolImporter {
   private hasOpenCodeFiles(dirPath: string): boolean {
     try {
       const entries = readdirSync(dirPath);
-      return entries.some((e) => this.isOpenCodeFile(join(dirPath, e)));
+      return entries.some((e) => {
+        const lower = e.toLowerCase();
+        return (lower.includes('opencode') || lower.includes('conversation')) &&
+          (lower.endsWith('.json') || lower.endsWith('.jsonl') || lower.endsWith('.log'));
+      });
     } catch {
       return false;
     }
@@ -109,7 +114,7 @@ export class OpenCodeImporter implements ToolImporter {
         } catch { /* skip */ }
       }
     } catch { /* skip */ }
-    // Fallback: read all JSONL/JSON files if no tool-specific files found
+    // Fallback: read all JSONL/JSON/LOG files if no tool-specific files found
     if (files.length === 0) {
       try {
         const entries = safeReadDir(root, dirPath);
@@ -119,7 +124,7 @@ export class OpenCodeImporter implements ToolImporter {
             const stat = statSync(fullPath);
             if (stat.isFile()) {
               const ext = extname(entry).toLowerCase();
-              if (ext === '.jsonl' || ext === '.json') files.push(fullPath);
+              if (ext === '.jsonl' || ext === '.json' || ext === '.log') files.push(fullPath);
             }
           } catch { /* skip */ }
         }
@@ -140,7 +145,7 @@ export class OpenCodeImporter implements ToolImporter {
       const ext = extname(filePath).toLowerCase();
       let records: Record<string, unknown>[];
 
-      if (ext === '.jsonl') {
+      if (ext === '.jsonl' || ext === '.log') {
         const { records: jsonlRecords, errors } = readJsonl(filePath);
         records = jsonlRecords;
         if (errors.length > 0) {
@@ -176,17 +181,23 @@ export class OpenCodeImporter implements ToolImporter {
         const models = messages.map((m) => m.model as string | undefined).filter(Boolean);
         const tokenInputs = messages.reduce((sum, m) => sum + ((m.tokens_input as number) || (m.input_tokens as number) || 0), 0);
         const tokenOutputs = messages.reduce((sum, m) => sum + ((m.tokens_output as number) || (m.output_tokens as number) || 0), 0);
+        const cwdPaths = messages.map((m) => (m.cwd as string) || (m.project_path as string) || undefined).filter(Boolean);
+        const projectPath = cwdPaths[0];
 
         result.sessions.push({
           externalId: sessionId,
           sourceToolId: this.toolId,
+          projectId: projectPath ? projectPath.split(/[/\\]/).pop() : undefined,
           startedAt: timestamps[0],
           endedAt: timestamps.length > 1 ? timestamps[timestamps.length - 1] : undefined,
           summary: this.extractSummary(messages),
           model: models[0],
           tokensInput: tokenInputs > 0 ? tokenInputs : undefined,
           tokensOutput: tokenOutputs > 0 ? tokenOutputs : undefined,
-          metadata: { messageCount: messages.length },
+          metadata: {
+            messageCount: messages.length,
+            ...(projectPath ? { projectPath } : {}),
+          },
           events: messages.map((m) => ({
             eventType: (m.role as string) || (m.type as string) || 'message',
             occurredAt: (m.timestamp as string) || (m.created_at as string) || undefined,
@@ -202,12 +213,10 @@ export class OpenCodeImporter implements ToolImporter {
   }
 
   private extractSummary(messages: Record<string, unknown>[]): string | undefined {
-    for (const msg of messages) {
-      if (msg.role === 'user') {
-        const content = msg.content || msg.message;
-        if (typeof content === 'string' && content.length > 0) return content.slice(0, 200);
-      }
-    }
-    return `${messages.length} messages in OpenCode session`;
+    const models = [...new Set(messages.map((m) => m.model as string | undefined).filter(Boolean))];
+    const roles = [...new Set(messages.map((m) => (m.role as string) || (m.type as string) || undefined).filter(Boolean))];
+    const modelStr = models.length > 0 ? models.join(', ') : 'unknown model';
+    const roleStr = roles.length > 0 ? roles.join(', ') : 'assistant';
+    return `${messages.length}-message OpenCode session (model: ${modelStr}, roles: ${roleStr})`;
   }
 }

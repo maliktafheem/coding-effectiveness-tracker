@@ -5,7 +5,7 @@
  * Expected structure: JSONL or JSON files with session entries.
  *
  * Each record typically has fields like:
- * - id, session_id, type, timestamp, prompt, response, model, tokens, etc.
+ * - id, session_id, type, timestamp, prompt, response, model, tokens, cwd, etc.
  */
 
 import { existsSync, readdirSync, readFileSync, statSync, lstatSync } from 'node:fs';
@@ -83,7 +83,11 @@ export class CodexImporter implements ToolImporter {
   private hasCodexFiles(dirPath: string): boolean {
     try {
       const entries = readdirSync(dirPath);
-      return entries.some((e) => this.isCodexFile(join(dirPath, e)));
+      return entries.some((e) => {
+        const lower = e.toLowerCase();
+        return (lower.includes('codex') || lower.includes('log')) &&
+          (lower.endsWith('.json') || lower.endsWith('.jsonl') || lower.endsWith('.log'));
+      });
     } catch {
       return false;
     }
@@ -113,7 +117,7 @@ export class CodexImporter implements ToolImporter {
         } catch { /* skip */ }
       }
     } catch { /* skip */ }
-    // Fallback: read all JSONL/JSON files if no tool-specific files found
+    // Fallback: read all JSONL/JSON/LOG files if no tool-specific files found
     if (files.length === 0) {
       try {
         const entries = safeReadDir(root, dirPath);
@@ -123,7 +127,7 @@ export class CodexImporter implements ToolImporter {
             const stat = statSync(fullPath);
             if (stat.isFile()) {
               const ext = extname(entry).toLowerCase();
-              if (ext === '.jsonl' || ext === '.json') files.push(fullPath);
+              if (ext === '.jsonl' || ext === '.json' || ext === '.log') files.push(fullPath);
             }
           } catch { /* skip */ }
         }
@@ -180,17 +184,23 @@ export class CodexImporter implements ToolImporter {
         const models = messages.map((m) => m.model as string | undefined).filter(Boolean);
         const tokenInputs = messages.reduce((sum, m) => sum + ((m.tokens_input as number) || (m.input_tokens as number) || 0), 0);
         const tokenOutputs = messages.reduce((sum, m) => sum + ((m.tokens_output as number) || (m.output_tokens as number) || 0), 0);
+        const cwdPaths = messages.map((m) => (m.cwd as string) || (m.project_path as string) || undefined).filter(Boolean);
+        const projectPath = cwdPaths[0];
 
         result.sessions.push({
           externalId: sessionId,
           sourceToolId: this.toolId,
+          projectId: projectPath ? projectPath.split(/[/\\]/).pop() : undefined,
           startedAt: timestamps[0],
           endedAt: timestamps.length > 1 ? timestamps[timestamps.length - 1] : undefined,
           summary: this.extractSummary(messages),
           model: models[0],
           tokensInput: tokenInputs > 0 ? tokenInputs : undefined,
           tokensOutput: tokenOutputs > 0 ? tokenOutputs : undefined,
-          metadata: { messageCount: messages.length },
+          metadata: {
+            messageCount: messages.length,
+            ...(projectPath ? { projectPath } : {}),
+          },
           events: messages.map((m) => ({
             eventType: (m.type as string) || 'turn',
             occurredAt: (m.timestamp as string) || (m.created_at as string) || undefined,
@@ -206,10 +216,10 @@ export class CodexImporter implements ToolImporter {
   }
 
   private extractSummary(messages: Record<string, unknown>[]): string | undefined {
-    for (const msg of messages) {
-      const prompt = msg.prompt || msg.input || msg.query;
-      if (typeof prompt === 'string' && prompt.length > 0) return prompt.slice(0, 200);
-    }
-    return `${messages.length} messages in Codex session`;
+    const models = [...new Set(messages.map((m) => m.model as string | undefined).filter(Boolean))];
+    const types = [...new Set(messages.map((m) => m.type as string | undefined).filter(Boolean))];
+    const modelStr = models.length > 0 ? models.join(', ') : 'unknown model';
+    const typeStr = types.length > 0 ? types.join(', ') : 'turn';
+    return `${messages.length}-message Codex session (model: ${modelStr}, types: ${typeStr})`;
   }
 }

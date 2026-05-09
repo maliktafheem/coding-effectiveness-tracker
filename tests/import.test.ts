@@ -153,6 +153,28 @@ describe('Claude Code importer', () => {
     expect(result.errors).toBeGreaterThan(0);
     expect(result.sessions).toHaveLength(0);
   });
+
+  it('extracts project path from cwd field', () => {
+    const result = new ClaudeCodeImporter().parse({ sourcePath: join(FIXTURES_DIR, 'claude-code') });
+    const session = result.sessions[0];
+    expect(session.metadata).toBeTruthy();
+    expect(session.metadata!.projectPath).toBe('/home/user/projects/my-app');
+    expect(session.projectId).toBe('my-app');
+  });
+
+  it('produces safe metadata summary without raw prompt content', () => {
+    const result = new ClaudeCodeImporter().parse({ sourcePath: join(FIXTURES_DIR, 'claude-code') });
+    const session = result.sessions[0];
+    expect(session.summary).toMatch(/\d+-message Claude Code session/);
+    expect(session.summary).not.toContain('refactor');
+    expect(session.summary).not.toContain('API key');
+  });
+
+  it('handles .log file extension in canHandle', () => {
+    const logFile = join(tempDir, 'conversation.log');
+    writeFileSync(logFile, '{"sessionId":"test","type":"assistant","timestamp":"2026-05-01T00:00:00Z"}\n');
+    expect(new ClaudeCodeImporter().canHandle(logFile)).toBe(true);
+  });
 });
 
 // ─── Codex importer ────────────────────────────────────────────────────────────
@@ -185,6 +207,22 @@ describe('Codex importer', () => {
     expect(result.errors).toBeGreaterThan(0);
     expect(result.sessions).toHaveLength(0);
   });
+
+  it('extracts project path from cwd field', () => {
+    const result = new CodexImporter().parse({ sourcePath: join(FIXTURES_DIR, 'codex') });
+    const session = result.sessions.find((s) => s.externalId === 'codex-session-001');
+    expect(session).toBeTruthy();
+    expect(session!.metadata!.projectPath).toBe('/home/user/projects/my-app');
+    expect(session!.projectId).toBe('my-app');
+  });
+
+  it('produces safe metadata summary without raw prompt content', () => {
+    const result = new CodexImporter().parse({ sourcePath: join(FIXTURES_DIR, 'codex') });
+    const session = result.sessions[0];
+    expect(session.summary).toMatch(/\d+-message Codex session/);
+    expect(session.summary).not.toContain('unit test');
+    expect(session.summary).not.toContain('Deploy');
+  });
 });
 
 // ─── OpenCode importer ─────────────────────────────────────────────────────────
@@ -199,6 +237,22 @@ describe('OpenCode importer', () => {
     expect(result.errors).toBe(0);
     expect(result.sessions.length).toBeGreaterThanOrEqual(2);
     expect(result.sessions[0].sourceToolId).toBe('opencode');
+  });
+
+  it('extracts project path from cwd field', () => {
+    const result = new OpenCodeImporter().parse({ sourcePath: join(FIXTURES_DIR, 'opencode') });
+    const session = result.sessions.find((s) => s.externalId === 'opencode-session-001');
+    expect(session).toBeTruthy();
+    expect(session!.metadata!.projectPath).toBe('/home/user/projects/my-app');
+    expect(session!.projectId).toBe('my-app');
+  });
+
+  it('produces safe metadata summary without raw prompt content', () => {
+    const result = new OpenCodeImporter().parse({ sourcePath: join(FIXTURES_DIR, 'opencode') });
+    const session = result.sessions[0];
+    expect(session.summary).toMatch(/\d+-message OpenCode session/);
+    expect(session.summary).not.toContain('React');
+    expect(session.summary).not.toContain('config loader');
   });
 });
 
