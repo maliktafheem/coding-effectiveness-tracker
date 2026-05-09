@@ -17,7 +17,7 @@ Ordered by risk first, then polish.
 
 **Problem.** `claude-code.ts:186`, `codex.ts:193`, `opencode.ts:190` set `projectId = cwd.split(/[/\\]/).pop()?.toLowerCase()`. Registry overrides this via `deriveProjectId(projectPath)` when `metadata.projectPath` set. Fallback survives when projectPath missing → two repos named `api` merge.
 
-**Fix.** Registry becomes authoritative. Importers stop setting `projectId` directly. Session.projectId remains null unless registry derives stable id from projectPath. Session still links to default project via existing code.
+**Fix.** Registry becomes authoritative. Importers stop setting `projectId` directly; they only pass `metadata.projectPath` when known. Registry derives stable id via `deriveProjectId(projectPath)` when path present; otherwise session.projectId stays null. Null is acceptable — sessions with no project context should not be auto-bucketed into a shared folder-name key.
 
 **Tests.** Add cross-path collision test: two sessions with `/home/a/api` and `/home/b/api` produce distinct `projectId`s. Test session with no cwd metadata stays unlinked or links to default, never collides.
 
@@ -25,7 +25,11 @@ Ordered by risk first, then polish.
 
 **Problem.** `effectiveness.ts:164-168` and `:261-264` run `SELECT count(*) FROM correlations WHERE session_id = ? AND correlation_type = ?` once per session. At 10k sessions, that is 20k prepared statement runs per score computation.
 
-**Fix.** Single aggregate: `SELECT session_id, correlation_type, COUNT(*) AS cnt FROM correlations WHERE session_id IN (?, ?, ...) AND correlation_type IN ('git-commit', 'test-outcome') GROUP BY session_id, correlation_type`. Build `Map<sessionId, Set<type>>`, read per session in memory. Two aggregate queries replace 2×N.
+**Fix.** Replace per-session loop with aggregate scoped to already-filtered session set. Two survival options vs SQLite 999-param IN limit:
+- (preferred) Re-issue the session filter inside the correlation query as subquery/JOIN: `SELECT c.session_id, c.correlation_type, COUNT(*) cnt FROM correlations c JOIN sessions s ON c.session_id = s.id WHERE <same filters> GROUP BY c.session_id, c.correlation_type`. No param explosion.
+- Fallback when filters too complex to replay: chunk session ids into batches of 500, aggregate per batch, merge.
+
+Result: `Map<sessionId, Map<type, count>>`. Read per session in memory. One aggregate query covers both git + test types.
 
 **Tests.** Existing scoring tests must still pass. Add perf-shaped test: 500 sessions, 2000 correlations, score computes <100ms.
 
