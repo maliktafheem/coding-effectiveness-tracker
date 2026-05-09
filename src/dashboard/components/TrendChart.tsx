@@ -1,16 +1,6 @@
 import { useFetch } from './useFetch';
 import type { TrendData } from './types';
 
-interface TrendPoint {
-  weekStart: string;
-  weekEnd: string;
-  sessionCount: number;
-  sessionsWithGit: number;
-  totalTestsPassed: number;
-  totalTestsFailed: number;
-  scoreAggregate: number;
-}
-
 export default function TrendChart({ filterStr }: { filterStr: string }) {
   const { data, loading, error } = useFetch<TrendData>(
     '/api/trends' + filterStr,

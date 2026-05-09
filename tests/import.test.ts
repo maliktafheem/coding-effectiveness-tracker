@@ -23,6 +23,7 @@ import {
 import { readJsonl } from '../src/importers/utils.js';
 import { redactSecrets, findCanaryLeaks, sanitizeForOutput, CANARY_SECRETS, ALL_CANARIES } from '../src/importers/privacy.js';
 import { safeResolvePath, PathSafetyError } from '../src/importers/path-safety.js';
+import { deriveProjectId } from '../src/project-identity.js';
 
 const FIXTURES_DIR = join(process.cwd(), 'tests', 'fixtures');
 
@@ -159,7 +160,7 @@ describe('Claude Code importer', () => {
     const session = result.sessions[0];
     expect(session.metadata).toBeTruthy();
     expect(session.metadata!.projectPath).toBe('/home/user/projects/my-app');
-    expect(session.projectId).toBe('my-app');
+    expect(session.projectId).toBeUndefined();
   });
 
   it('produces safe metadata summary without raw prompt content', () => {
@@ -213,7 +214,7 @@ describe('Codex importer', () => {
     const session = result.sessions.find((s) => s.externalId === 'codex-session-001');
     expect(session).toBeTruthy();
     expect(session!.metadata!.projectPath).toBe('/home/user/projects/my-app');
-    expect(session!.projectId).toBe('my-app');
+    expect(session!.projectId).toBeUndefined();
   });
 
   it('produces safe metadata summary without raw prompt content', () => {
@@ -244,7 +245,7 @@ describe('OpenCode importer', () => {
     const session = result.sessions.find((s) => s.externalId === 'opencode-session-001');
     expect(session).toBeTruthy();
     expect(session!.metadata!.projectPath).toBe('/home/user/projects/my-app');
-    expect(session!.projectId).toBe('my-app');
+    expect(session!.projectId).toBeUndefined();
   });
 
   it('produces safe metadata summary without raw prompt content', () => {
@@ -1064,5 +1065,56 @@ describe('Explicit --source without --tool (integration)', () => {
     copyFileSync(srcFile, dstFile);
     const result = runCli(['import', '-d', tempDir, '--tool', 'codex', '--source', spacedDir]);
     expect(result.exitCode).toBe(0);
+  });
+});
+
+// ─── Project identity collision prevention (VAL-IMPORT-013) ───────────────────
+
+describe('VAL-IMPORT-013: Importers do not set naive projectId from folder basename', () => {
+  // The importer's .parse() must NOT set projectId from the last path component.
+  // Registry is the sole authority for projectId derivation.
+  // If importers set a naive basename, two repos /home/alice/api and /home/bob/api
+  // would both get projectId="api" and collide in the DB.
+
+  it('ClaudeCodeImporter.parse() leaves projectId undefined when cwd is present (registry derives it)', () => {
+    const result = new ClaudeCodeImporter().parse({ sourcePath: join(FIXTURES_DIR, 'collision-a') });
+    expect(result.sessions).toHaveLength(1);
+    // projectId must NOT be the naive basename "api"
+    expect(result.sessions[0].projectId).toBeUndefined();
+    // projectPath must still be populated so registry can derive the stable ID
+    expect(result.sessions[0].metadata?.projectPath).toBe('/home/alice/api');
+  });
+
+  it('two repos sharing the same last folder name produce different project_id values in DB after runImport', () => {
+    const tempDir = mkdtempSync(join(tmpdir(), 'cet-collision-'));
+    const storage = createTestStorage(tempDir);
+    try {
+      // collision-a has cwd=/home/alice/api, collision-b has cwd=/home/bob/api
+      runImport(new ClaudeCodeImporter(), { sourcePath: join(FIXTURES_DIR, 'collision-a') }, storage);
+      runImport(new ClaudeCodeImporter(), { sourcePath: join(FIXTURES_DIR, 'collision-b') }, storage);
+
+      const rows = storage.db
+        .prepare('SELECT project_id FROM sessions ORDER BY started_at')
+        .all() as { project_id: string }[];
+
+      expect(rows).toHaveLength(2);
+
+      const idA = rows[0].project_id;
+      const idB = rows[1].project_id;
+
+      // Both must be non-null (path was present, registry must assign a stable ID)
+      expect(idA).toBeTruthy();
+      expect(idB).toBeTruthy();
+
+      // They must differ — same folder name "api" but different full paths
+      expect(idA).not.toBe(idB);
+
+      // Each must match the stable ID derived from its full path
+      expect(idA).toBe(deriveProjectId('/home/alice/api'));
+      expect(idB).toBe(deriveProjectId('/home/bob/api'));
+    } finally {
+      storage.close();
+      safeCleanup(tempDir);
+    }
   });
 });

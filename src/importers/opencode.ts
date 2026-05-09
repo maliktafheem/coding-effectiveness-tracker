@@ -187,7 +187,7 @@ export class OpenCodeImporter implements ToolImporter {
         result.sessions.push({
           externalId: sessionId,
           sourceToolId: this.toolId,
-          projectId: projectPath ? projectPath.split(/[/\\]/).pop()?.toLowerCase() : undefined,
+          projectId: undefined,
           startedAt: timestamps[0],
           endedAt: timestamps.length > 1 ? timestamps[timestamps.length - 1] : undefined,
           summary: this.extractSummary(messages),

@@ -1,0 +1,2 @@
+{"sessionId":"collision-b-001","type":"human","timestamp":"2026-05-01T11:00:00Z","content":"Working on project B","model":"claude-sonnet-4-20250514","cwd":"/home/bob/api"}
+{"sessionId":"collision-b-001","type":"assistant","timestamp":"2026-05-01T11:00:30Z","content":"Sure, let me help with project B.","model":"claude-sonnet-4-20250514","cwd":"/home/bob/api"}
