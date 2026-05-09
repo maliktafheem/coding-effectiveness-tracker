@@ -60,6 +60,27 @@ After building or installing globally, the CLI command is `cet`.
 
 ## Quick Start
 
+
+
+### 0. One-Command Setup (Recommended)
+
+The fastest way to get started:
+
+```powershell
+cet setup
+```
+
+This single command initializes your workspace, auto-discovers AI sessions from installed
+tools (Claude Code, Codex, OpenCode, Cursor, Factory Droid), syncs with your current Git
+repository, and starts the dashboard. Then visit **http://127.0.0.1:43187** to explore your data.
+
+When running `cet` with no arguments, a Quick Start guide is displayed with useful links.
+
+```powershell
+cet
+```
+
+
 ### 1. Initialize
 
 Initialize the local workspace and SQLite database:
@@ -122,6 +143,7 @@ cet serve
 
 | Command | Purpose |
 | --- | --- |
+| `cet setup [--no-serve] [--interactive] [--port <port>]` | One-command onboarding: initialize, discover, import, sync, and start the dashboard. |
 | `cet init [--data-dir <path>] [--force]` | Initialize the local tracker workspace and database. |
 | `cet import [--tool <id>] [--source <path>] [--fixture <path>] [--discover] [--dry-run] [--verbose]` | Import AI coding sessions from Codex, OpenCode, Claude Code, Cursor, or Factory Droid. |
 | `cet sync --repo <path> [--project <id>]` | Read local Git commits and correlate them with imported sessions. |
@@ -130,6 +152,7 @@ cet serve
 | `cet report [--json] [--tool <id>] [--project <id>] [--from <date>] [--to <date>]` | Generate an effectiveness report from imported data. |
 | `cet serve [--port <port>]` | Start the local dashboard and API server on `127.0.0.1`; default port is `43187`. |
 | `cet export --output <path> [--format json\|markdown] [--overwrite] [--tool <id>] [--project <id>] [--from <date>] [--to <date>]` | Export an effectiveness report to a local file. |
+| `cet watch [--interval <minutes>] [--stop] [--status]` | Start, stop, or check status of the background daemon. |
 
 Most commands also accept `--data-dir <path>` to use a custom tracker data directory.
 

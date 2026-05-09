@@ -15,6 +15,65 @@ cet <command> [options]
 
 ## Commands
 
+### `cet setup`
+
+One-command onboarding: initialize workspace, discover AI tools, sync git, and start the dashboard.
+
+```
+cet setup [options]
+```
+
+**Options:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `-d, --data-dir <path>` | string | — | Custom data directory path |
+| `--port <port>` | number | 43187 | Dashboard port |
+| `--no-serve` | boolean | false | Skip starting the dashboard server |
+| `--interactive` | boolean | false | Ask which tools to import and which repo to sync |
+
+**Behavior:**
+- Auto-initializes workspace if not already initialized (calls `cet init` silently)
+- Auto-discovers AI tool directories and imports sessions from default paths
+- If no tools found, prints guidance on where to place tool data
+- Walks up parent directories from cwd to find .git and syncs commits
+- Starts the dashboard server on the default port (43187) and prints the URL
+- **Default mode** runs everything automatically with no prompts
+- **`--no-serve`** runs init, import, and sync but skips starting the dashboard
+- **`--interactive`** prompts for tool selection and repo path, showing detected defaults
+
+**Examples:**
+
+```bash
+# Full auto-onboarding
+cet setup
+
+# Skip dashboard, just initialize and import
+cet setup --no-serve
+
+# Interactive mode
+cet setup --interactive
+
+# Custom port
+cet setup --port 8080
+
+# Custom data directory
+cet setup --data-dir ~/my-tracker-data
+```
+
+**Output:**
+
+```
+✔ Workspace initialized
+✔ Discovered sessions from: claude-code, cursor
+✔ Synced 47 commits from /home/user/projects/my-app
+  Dashboard: http://127.0.0.1:43187
+  Privacy: All data stays local. No telemetry.
+```
+
+---
+
+
 ### `cet init`
 
 Initialize a local tracker workspace with configuration and SQLite database.
@@ -377,4 +436,58 @@ cet export --format markdown --output report.md --overwrite
 
 # Filtered export
 cet export --format json --output codex-report.json --tool codex --from 2025-01-01
+```
+---
+
+### `cet watch`
+
+Start, stop, or check the status of a background daemon that keeps tracker data fresh.
+
+```
+cet watch [options]
+```
+
+**Options:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `-d, --data-dir <path>` | string | — | Custom data directory path |
+| `--stop` | boolean | false | Stop the running daemon |
+| `--status` | boolean | false | Check daemon status |
+| `--interval <minutes>` | number | 10 | Polling interval in minutes (minimum: 1) |
+
+**Daemon behavior (start mode):**
+- Forks a background Node.js process that polls every N minutes
+- Stores PID in `<dataDir>/watch.pid` for lifecycle management
+- Each poll cycle: auto-init check, discover/import new AI sessions, sync git commits
+- Logs activity to `<dataDir>/watch.log` with timestamps
+- Graceful shutdown on SIGTERM/SIGINT: cleans PID file, logs shutdown
+
+**Stop behavior (`--stop`):**
+- Reads PID from `<dataDir>/watch.pid`, sends termination signal
+- Waits for clean exit, removes PID file
+- If no PID file: prints "Daemon not running" and exits 0
+- If stale PID (process dead): cleans up and prints message
+
+**Status behavior (`--status`):**
+- PID file exists + process alive: prints "Daemon running (PID: <pid>)"
+- PID file exists + process dead: cleans up and prints "Daemon not running (stale PID cleaned)"
+- No PID file: prints "Daemon not running"
+
+**Examples:**
+```bash
+# Start daemon with default 10-minute interval
+cet watch
+
+# Start daemon with 5-minute polling
+cet watch --interval 5
+
+# Check daemon status
+cet watch --status
+
+# Stop daemon
+cet watch --stop
+
+# Custom data directory
+cet watch --data-dir ~/my-tracker-data --interval 15
 ```

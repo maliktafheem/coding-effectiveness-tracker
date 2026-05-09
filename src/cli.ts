@@ -9,6 +9,7 @@ import { handleSync } from './commands/sync.js';
 import { handleTestOutcome } from './commands/test-outcome.js';
 import { handleServe } from './commands/serve.js';
 import { handleExport } from './commands/export.js';
+import { handleWatch } from './commands/watch.js';
 
 // Ensure all importers are registered
 import './importers/index.js';
@@ -117,6 +118,15 @@ program
   .option('--to <date>', 'End date filter')
   .action(handleExport);
 
+program
+  .command('watch')
+  .description('Start/stop/status a background daemon that keeps tracker data fresh (imports sessions, syncs git)')
+  .option('-d, --data-dir <path>', 'Custom data directory path')
+  .option('--stop', 'Stop the running daemon')
+  .option('--status', 'Check daemon status')
+  .option('--interval <minutes>', 'Polling interval in minutes (default: 10, min: 1)')
+  .action(handleWatch);
+
 // Unknown command handler
 program.on('command:*', (operands) => {
   const unknown = operands[0];
@@ -129,6 +139,33 @@ export { program };
 
 // Only run when executed directly
 if (process.argv[1]?.endsWith('cli.ts') || process.argv[1]?.endsWith('cli.js')) {
+  // Check for zero-arg BEFORE parse since Commander auto-exits with help when no command is given
+  const cliArgs = process.argv.slice(2);
+  if (cliArgs.length === 0) {
+    console.log('');
+    console.log('Coding Effectiveness Tracker');
+    console.log('───────────────────────────');
+    console.log('Track and understand your AI coding effectiveness in 3 seconds:');
+    console.log('');
+    console.log('  cet setup');
+    console.log('');
+    console.log('This will initialize your workspace, discover AI sessions from installed tools,');
+    console.log('sync with your current Git repo, and start the dashboard.');
+    console.log('');
+    console.log('Then visit http://127.0.0.1:43187 to see your data.');
+    console.log('');
+    console.log('Need more control?');
+    console.log('  cet setup --help     See all setup options');
+    console.log('  cet --help            See all commands');
+    console.log('  cet import --help     Learn about importing from specific tools');
+    console.log('  cet watch --help      Learn about background monitoring');
+    console.log('');
+    console.log('Docs: https://github.com/TafheemMalik/coding-effectiveness-tracker');
+    console.log('All data stays local. No telemetry.');
+    console.log('');
+    process.exit(0);
+  }
+
   program.parse(process.argv);
 }
 
