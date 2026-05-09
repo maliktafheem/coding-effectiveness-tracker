@@ -156,10 +156,13 @@ if (process.argv[1]?.endsWith('cli.ts') || process.argv[1]?.endsWith('cli.js')) 
     console.log('');
     console.log('  cet setup');
     console.log('');
-    console.log('This will initialize your workspace, discover AI sessions from installed tools,');
-    console.log('sync with your current Git repo, and start the dashboard.');
+    console.log('Or import sessions from a specific tool:');
+    console.log('  cet import --tool claude-code --discover');
+    console.log('  cet import --tool opencode --discover');
+    console.log('  cet import --tool codex --discover');
     console.log('');
-    console.log('Then visit http://127.0.0.1:43187 to see your data.');
+    console.log('Capture test outcomes:');
+    console.log('  cet test -- <command>');
     console.log('');
     console.log('Need more control?');
     console.log('  cet setup --help     See all setup options');

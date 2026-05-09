@@ -8,8 +8,21 @@ export default function OverviewPage({ filterStr }: { filterStr: string }) {
   if (error) return <div className="error"><h2>Error</h2><p>{error}</p><p>Check that the server is running and try refreshing.</p><button className="btn btn-primary" onClick={() => window.location.reload()} style={{marginTop: 8}}>Retry</button></div>;
   if (!data || data.empty) return (
     <div className="empty">
-      <h2>No Sessions Available</h2>
-      <p>{data?.message || 'No sessions found. Import data with: cet import --fixture <path>'}</p>
+      <h2>Welcome to Coding Effectiveness Tracker</h2>
+      <p>{data?.message || 'No sessions recorded yet.'}</p>
+      <div className="quick-start" style={{ marginTop: '1rem', textAlign: 'left', display: 'inline-block' }}>
+        <p><strong>Quick start:</strong></p>
+        <ul>
+          <li><code>cet setup</code> — One-command onboarding</li>
+          <li><code>cet import --tool claude-code --discover</code></li>
+          <li><code>cet import --tool opencode --discover</code></li>
+          <li><code>cet import --tool codex --discover</code></li>
+          <li><code>cet test -- npm test</code> — Track test outcomes</li>
+        </ul>
+        <p style={{ marginTop: '0.5rem', fontSize: '0.85rem', opacity: 0.7 }}>
+          All data stays on your machine. No cloud sync or telemetry.
+        </p>
+      </div>
     </div>
   );
 

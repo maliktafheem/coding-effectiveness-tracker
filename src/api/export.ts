@@ -98,7 +98,7 @@ export function generateMarkdownExport(storage: Storage, opts: ExportOptions): s
   lines.push('Privacy: All data stays local. No telemetry or external services.');
   lines.push('');
   if (data.empty) {
-    lines.push('**No sessions found.** Import data with: cet import --fixture <path>');
+    lines.push('**No sessions recorded yet.** Run `cet setup` to onboard, or `cet import --tool claude-code --discover` to import sessions.');
     return lines.join('\n');
   }
   lines.push('## Overview');

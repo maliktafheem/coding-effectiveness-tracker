@@ -64,14 +64,20 @@ export async function handleReport(opts: ReportOptions): Promise<void> {
     if (sessions.length === 0) {
       if (opts.json) {
         console.log(JSON.stringify({
-          score: { aggregate: 0, dimensions: [], missingInputs: ['No sessions available.'] },
+          score: { aggregate: 0, dimensions: [], missingInputs: ['No sessions available. Run cet setup to get started.'] },
           sessions: [],
           sources: [],
           period: { from: opts.from || null, to: opts.to || null },
-          message: 'No sessions found. Import data with: cet import --fixture <path>',
+          message: 'No sessions recorded yet. Try: cet setup, cet import --tool claude-code --discover, or cet test -- <command>.',
         }, null, 2));
       } else {
-        console.log('No sessions found. Import data with: cet import --fixture <path>');
+        console.log('No sessions recorded yet. Get started:');
+        console.log('');
+        console.log('  cet setup                                    One-command onboarding');
+        console.log('  cet import --tool claude-code --discover     Import Claude Code sessions');
+        console.log('  cet import --tool opencode --discover       Import OpenCode sessions');
+        console.log('  cet import --tool codex --discover          Import Codex sessions');
+        console.log('  cet test -- <command>                       Run a command and track results');
       }
       return;
     }

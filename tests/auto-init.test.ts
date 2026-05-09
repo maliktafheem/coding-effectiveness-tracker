@@ -118,7 +118,7 @@ describe('auto-init via CLI - report command', () => {
     const result = runCli(['report', '-d', dataDir]);
     expect(result.exitCode).toBe(0);
     expect(result.stdout).not.toContain('Run cet init first');
-    expect(result.stdout).toContain('No sessions found');
+    expect(result.stdout).toContain('No sessions recorded');
     verifyInitialized(dataDir);
   });
 });

@@ -197,6 +197,10 @@ export async function handleSetup(opts: SetupOptions): Promise<void> {
 
       if (totalImported === 0 && totalErrors === 0) {
         console.log('  No sessions found in discovered directories.');
+        console.log('  Try importing from a specific tool:');
+        console.log('    cet import --tool claude-code --discover');
+        console.log('    cet import --tool opencode --discover');
+        console.log('    cet import --tool codex --discover');
       }
 
       console.log('  Import complete: ' + totalImported + ' session(s) imported, ' + totalErrors + ' error(s).');
