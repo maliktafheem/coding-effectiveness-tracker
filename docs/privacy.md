@@ -10,7 +10,7 @@ The Coding Effectiveness Tracker is designed as a **local-first** tool. All data
 2. **No telemetry** — the tool does not collect usage statistics, crash reports, or analytics
 3. **No hosted backend** — there is no cloud component; the API server runs on the same machine
 4. **Explicit opt-in for discovery** — auto-scanning tool directories requires `--discover` flag
-5. **Redaction by default** — secrets, tokens, and sensitive metadata are redacted before storage
+5. **Redaction by default** — known secret patterns, tokens, and sensitive metadata keys are redacted before storage; see [Limitations and Known Gaps](#limitations-and-known-gaps) for what may not be caught
 6. **Transparent handling** — every command prints a privacy statement on completion
 
 ---
@@ -129,6 +129,45 @@ Canary strings are embedded in test fixtures to provide automated verification t
 5. Report output does not contain canary strings
 
 These tests ensure that if the redaction pipeline has a regression, it will be caught before any sensitive data could be exposed.
+
+---
+
+## Limitations and Known Gaps
+
+The redaction pipeline is a **pattern-matching blocklist**, not a semantic classifier. It can only catch what it has been explicitly taught to recognize. Patterns must be known in advance to match.
+
+### What IS caught
+
+The patterns described in the [Redaction Pipeline](#redaction-pipeline) section above cover:
+
+| Category | Examples caught |
+|----------|----------------|
+| API keys with common prefixes | `sk-`, `sk_live_`, `sk_test_`, `pk_live_`, `pk_test_` |
+| Key/value assignments with known sensitive names | `apiKey=...`, `token: ...`, `secret=...`, `password=...` |
+| Bearer tokens | `Bearer <credential>` |
+| JWT-shaped strings | `eyJ...eyJ...` three-part structure |
+| Known sensitive metadata keys | `apikey`, `token`, `secret`, `password`, `auth`, `authorization`, `accesstoken`, `authtoken` (all casing variants) |
+
+### What MAY slip through
+
+- **Novel secret formats without a recognized prefix** — a new vendor's API key that uses an unfamiliar structure (e.g., `vnd_abc123xyz...`) will not match any existing pattern and will pass through unredacted.
+- **High-entropy opaque strings in free text** — a random-looking credential embedded in a sentence without a keyword like `key=`, `token=`, or `Bearer` will not be caught.
+- **Custom tool-specific metadata keys** — any metadata key not in the `SENSITIVE_KEY_STEMS` set (`apikey`, `accesstoken`, `authtoken`, `token`, `secret`, `password`, `authorization`, `auth`) will have its value passed through `redactSecrets()` but will not be treated as unconditionally sensitive. A key like `my_internal_credential` or `x-custom-auth-header` will not match.
+- **User-written content in session summaries** — if a session summary or annotation contains a secret that lacks a recognized prefix or keyword context, it will be stored as-is.
+
+### `metadata_json` and raw exports
+
+Full session metadata (the `metadata_json` field) is **excluded from exports by default**. Passing `raw=true` to `/api/export/json` or `/api/export/markdown` includes it. The raw metadata may contain fields that were not redacted because their keys are not in the sensitive-key list. Inspect raw exports carefully before sharing.
+
+### Practical recommendation
+
+Treat all exports as **sensitive by default**. Review the content before sharing with colleagues, pasting into issue trackers, or uploading anywhere. The redaction pipeline reduces risk but does not eliminate it.
+
+---
+
+## Reporting a Redaction Gap
+
+If you find a secret format or metadata key that slips through the redaction pipeline, please report it privately. Follow the process described in [SECURITY.md](../SECURITY.md) — open a private vulnerability report via the GitHub Security tab rather than a public issue. Privacy gaps (content that should be redacted but is not) are treated as security issues under the same process.
 
 ---
 

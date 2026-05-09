@@ -34,7 +34,7 @@ Local-first personal tracker for understanding whether AI-assisted coding workfl
 
 ## Privacy and Local-First Design
 
-Coding Effectiveness Tracker stores data on your machine and runs the dashboard/API on loopback (`127.0.0.1`). It does not provide cloud sync, telemetry, or a hosted backend. Import discovery is explicit opt-in, and verbose import output is designed to redact secrets and prompts.
+Coding Effectiveness Tracker stores data on your machine and runs the dashboard/API on loopback (`127.0.0.1`). It does not provide cloud sync, telemetry, or a hosted backend. Import discovery is explicit opt-in, and verbose import output applies pattern-based redaction for common secret formats — see [Privacy docs](docs/privacy.md#limitations-and-known-gaps) for what may not be caught.
 
 ## Prerequisites
 
