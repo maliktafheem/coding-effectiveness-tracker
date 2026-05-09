@@ -1,4 +1,5 @@
 import type React from 'react';
+import { useId } from 'react';
 
 export interface ChartPadding {
   top: number;
@@ -13,6 +14,13 @@ export interface ChartRenderCtx {
   stepX: number;
   chartW: number;
   chartH: number;
+  /** Unique ref for the chart's scoped <defs>. Use `gradientUrl` / `glowUrl` in fill/filter attrs. */
+  gradientId: string;
+  glowId: string;
+  gridId: string;
+  gradientUrl: string;
+  glowUrl: string;
+  gridUrl: string;
 }
 
 export interface ChartProps<T> {
@@ -47,27 +55,37 @@ export default function Chart<T>({
   const padX = (i: number) => PAD.left + i * stepX;
   const padY = (v: number) => PAD.top + chartH - (v / yMax) * chartH;
 
+  // useId produces a unique string per component instance. Strip any ':' so
+  // the result is safe inside SVG id attributes and url(#...) references.
+  const rawId = useId().replace(/:/g, '');
+  const gradientId = `scoreGradient-${rawId}`;
+  const glowId = `glow-${rawId}`;
+  const gridId = `chartGrid-${rawId}`;
+  const gradientUrl = `url(#${gradientId})`;
+  const glowUrl = `url(#${glowId})`;
+  const gridUrl = `url(#${gridId})`;
+
   return (
     <svg
       viewBox={`0 0 ${width} ${height}`}
       style={{ width: '100%', height: 'auto', fontFamily: 'var(--font-mono)', fontSize: '10px' }}
     >
       <defs>
-        <linearGradient id="scoreGradient" x1="0" y1="0" x2="0" y2="1">
+        <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor="var(--accent-cyan)" stopOpacity="0.18" />
           <stop offset="100%" stopColor="var(--accent-cyan)" stopOpacity="0.02" />
         </linearGradient>
-        <filter id="glow">
+        <filter id={glowId}>
           <feGaussianBlur stdDeviation="1.5" result="blur" />
           <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
         </filter>
-        <pattern id="chartGrid" width="12" height="12" patternUnits="userSpaceOnUse">
+        <pattern id={gridId} width="12" height="12" patternUnits="userSpaceOnUse">
           <path d="M 12 0 L 0 0 0 12" fill="none" stroke="var(--border-subtle)" strokeWidth="0.3" opacity="0.4" />
         </pattern>
       </defs>
 
       {/* Chart background */}
-      <rect x={PAD.left} y={PAD.top} width={chartW} height={chartH} fill="url(#chartGrid)" opacity="0.5" />
+      <rect x={PAD.left} y={PAD.top} width={chartW} height={chartH} fill={gridUrl} opacity="0.5" />
 
       {/* Horizontal grid lines with staggered entrance */}
       {yTicks.map((tick, ti) => {
@@ -105,7 +123,7 @@ export default function Chart<T>({
       })}
 
       {/* Chart-specific content via render prop */}
-      {children({ padX, padY, stepX, chartW, chartH })}
+      {children({ padX, padY, stepX, chartW, chartH, gradientId, glowId, gridId, gradientUrl, glowUrl, gridUrl })}
 
       <style>{`
         @keyframes drawLine {

@@ -44,7 +44,7 @@ export default function TrendChart({ filterStr }: { filterStr: string }) {
         formatY={(v) => `${Math.round(v * 100)}%`}
         formatX={(p) => formatWeek(p.weekStart)}
       >
-        {({ padX, padY, stepX }) => {
+        {({ padX, padY, stepX, gradientUrl, glowUrl }) => {
           const sessionsToY = (v: number) => PAD.top + chartH - (v / maxSessions) * chartH;
           const barW = Math.max(stepX * 0.55, 3);
 
@@ -76,7 +76,7 @@ export default function TrendChart({ filterStr }: { filterStr: string }) {
               {/* Area fill under score line */}
               <path
                 d={areaPath}
-                fill="url(#scoreGradient)"
+                fill={gradientUrl}
                 style={{ animation: `fadeSlideUp 0.6s 0.5s cubic-bezier(0.16, 1, 0.3, 1) both` }}
               />
 
@@ -88,7 +88,7 @@ export default function TrendChart({ filterStr }: { filterStr: string }) {
                 strokeWidth="2"
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                filter="url(#glow)"
+                filter={glowUrl}
                 strokeDasharray={lineLength}
                 strokeDashoffset={lineLength}
                 style={{ animation: `drawLine 1.2s 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards` }}
@@ -121,7 +121,7 @@ export default function TrendChart({ filterStr }: { filterStr: string }) {
 
               {/* Legend */}
               <g transform={`translate(${PAD.left}, ${PAD.top - 12})`} style={{ animation: `fadeSlideRight 0.5s 0.8s cubic-bezier(0.16, 1, 0.3, 1) both` }}>
-                <line x1="0" y1="0" x2="18" y2="0" stroke="var(--accent-cyan)" strokeWidth="2" filter="url(#glow)" />
+                <line x1="0" y1="0" x2="18" y2="0" stroke="var(--accent-cyan)" strokeWidth="2" filter={glowUrl} />
                 <text x="24" y="4" fill="var(--text-secondary)" fontSize="10" letterSpacing="0.04em">Effectiveness Score</text>
                 <rect x="168" y="-5" width="18" height="10" fill="var(--accent-violet)" opacity="0.25" rx="2" />
                 <text x="192" y="4" fill="var(--text-secondary)" fontSize="10" letterSpacing="0.04em">Session Volume</text>
