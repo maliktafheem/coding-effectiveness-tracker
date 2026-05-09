@@ -44,6 +44,8 @@ Coding Effectiveness Tracker stores data on your machine and runs the dashboard/
 
 ## Install, Build, and Test
 
+> **Note:** This package is not yet published on npm. Install from the local repository.
+
 ```powershell
 npm install
 npm run build

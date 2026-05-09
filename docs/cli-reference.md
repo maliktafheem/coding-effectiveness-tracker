@@ -209,6 +209,9 @@ cet import --fixture ./fixtures/sessions.json
 # Import from a specific tool and source
 cet import --tool codex --source ~/.codex/sessions
 
+# Import OpenCode sessions
+cet import --tool opencode --discover
+
 # Scan for importable data
 cet import --discover
 
