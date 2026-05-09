@@ -1,5 +1,5 @@
 import { existsSync, writeFileSync } from 'node:fs';
-import { resolveDataDir, isInitialized } from '../config.js';
+import { resolveDataDir, ensureInitialized } from '../config.js';
 import { Storage, StorageError } from '../storage.js';
 import { generateJsonExport, generateMarkdownExport } from '../api/export.js';
 
@@ -18,10 +18,7 @@ export async function handleExport(opts: ExportOptions): Promise<void> {
   const dataDir = resolveDataDir(opts.dataDir);
   const format = (opts.format || 'json').toLowerCase();
   const output = opts.output;
-  if (!isInitialized(dataDir)) {
-    console.error('Error: Workspace not initialized. Run "cet init" first.');
-    process.exit(1);
-  }
+  ensureInitialized(dataDir);
   if (!output) {
     console.error('Error: --output <path> is required.');
     console.error('Usage: cet export --format json -o report.json');

@@ -6,7 +6,7 @@
  */
 
 import { randomUUID } from 'node:crypto';
-import { resolveDataDir, isInitialized } from '../config.js';
+import { resolveDataDir, ensureInitialized } from '../config.js';
 import { Storage, StorageError } from '../storage.js';
 
 /** Accepted outcome labels. */
@@ -37,15 +37,12 @@ interface AnnotateOptions {
 export async function handleAnnotate(opts: AnnotateOptions): Promise<void> {
   const dataDir = resolveDataDir(opts.dataDir);
 
-  if (!isInitialized(dataDir)) {
-    console.error('Error: Workspace not initialized. Run "cet init" first.');
-    process.exit(1);
-  }
+  ensureInitialized(dataDir);
 
   // Validate outcome
   const outcomeLabel = opts.outcome.toLowerCase().trim();
   if (!VALID_OUTCOMES.has(outcomeLabel)) {
-    console.error(`Error: Invalid outcome "${opts.outcome}".`);
+    console.error('Error: Invalid outcome "' + opts.outcome + '".');
     console.error('Accepted values: ' + Array.from(VALID_OUTCOMES).join(', '));
     process.exit(1);
   }

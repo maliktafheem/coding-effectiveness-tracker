@@ -13,7 +13,7 @@
 
 import { existsSync, statSync } from 'node:fs';
 import { join, resolve, isAbsolute, basename } from 'node:path';
-import { resolveDataDir, isInitialized } from '../config.js';
+import { resolveDataDir, ensureInitialized } from '../config.js';
 import { Storage, StorageError } from '../storage.js';
 import { collectGitSignals, storeGitSignals } from '../collectors/git.js';
 import { correlateSession } from '../correlation/engine.js';
@@ -27,10 +27,7 @@ interface SyncOptions {
 export async function handleSync(opts: SyncOptions): Promise<void> {
   const dataDir = resolveDataDir(opts.dataDir);
 
-  if (!isInitialized(dataDir)) {
-    console.error('Error: Workspace not initialized. Run "cet init" first.');
-    process.exit(1);
-  }
+  ensureInitialized(dataDir);
 
   // Resolve repo path
   const repoPath = isAbsolute(opts.repo) ? opts.repo : resolve(opts.repo);

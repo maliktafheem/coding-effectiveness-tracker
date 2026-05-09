@@ -1,4 +1,4 @@
-import { resolveDataDir, isInitialized } from '../config.js';
+import { resolveDataDir, ensureInitialized } from '../config.js';
 import { Storage, StorageError } from '../storage.js';
 import { createApiServer } from '../api/server.js';
 
@@ -11,10 +11,8 @@ export async function handleServe(opts: ServeOptions): Promise<void> {
     console.error('Error: Invalid port number.');
     process.exit(1);
   }
-  if (!isInitialized(dataDir)) {
-    console.error('Error: Workspace not initialized. Run "cet init" first.');
-    process.exit(1);
-  }
+  ensureInitialized(dataDir);
+
   let storage: Storage | undefined;
   try {
     storage = Storage.open({ dataDir });

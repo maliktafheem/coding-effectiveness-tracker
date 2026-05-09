@@ -8,7 +8,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, mkdirSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
@@ -198,11 +198,13 @@ describe('CLI sync command (VAL-CLI-030, VAL-IMPORT-013)', () => {
     expect(result.stderr).toMatch(/not a git/i);
   });
 
-  it('fails when workspace is not initialized', () => {
-    const uninitializedDir = join(tempDir, 'uninit');
+  it('auto-initializes workspace if not already initialized', () => {
+    const uninitializedDir = join(tempDir, 'auto-init');
     const result = runCli(['sync', '-d', uninitializedDir, '--repo', repoDir]);
-    expect(result.exitCode).not.toBe(0);
-    expect(result.stderr).toMatch(/not initialized/i);
+    // With auto-init, the workspace gets initialized automatically
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).not.toMatch(/not initialized/i);
+    expect(existsSync(join(uninitializedDir, 'tracker.db'))).toBe(true);
   });
 
   it('works with empty git repo (no commits)', () => {

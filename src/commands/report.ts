@@ -5,7 +5,7 @@
  * Supports filtering by project, tool, date range, and JSON output.
  */
 
-import { resolveDataDir, isInitialized } from '../config.js';
+import { resolveDataDir, ensureInitialized } from '../config.js';
 import { Storage, StorageError } from '../storage.js';
 import { computeEffectivenessScore } from '../scoring/effectiveness.js';
 
@@ -21,10 +21,7 @@ interface ReportOptions {
 export async function handleReport(opts: ReportOptions): Promise<void> {
   const dataDir = resolveDataDir(opts.dataDir);
 
-  if (!isInitialized(dataDir)) {
-    console.error('Error: Workspace not initialized. Run "cet init" first.');
-    process.exit(1);
-  }
+  ensureInitialized(dataDir);
 
   let storage: Storage | undefined;
   try {

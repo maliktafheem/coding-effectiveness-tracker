@@ -14,7 +14,7 @@
 
 import { existsSync, statSync } from 'node:fs';
 import { join, resolve, isAbsolute, extname } from 'node:path';
-import { resolveDataDir, isInitialized } from '../config.js';
+import { resolveDataDir, ensureInitialized } from '../config.js';
 import { Storage, StorageError } from '../storage.js';
 import {
   getImporters,
@@ -57,10 +57,7 @@ export async function handleImport(opts: ImportOptions): Promise<void> {
   const dataDir = resolveDataDir(opts.dataDir);
   const verbose = opts.verbose ?? false;
 
-  if (!isInitialized(dataDir)) {
-    console.error('Error: Workspace not initialized. Run "cet init" first.');
-    process.exit(1);
-  }
+  ensureInitialized(dataDir);
 
   let storage: Storage | undefined;
   try {

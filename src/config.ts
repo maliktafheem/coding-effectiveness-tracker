@@ -1,6 +1,7 @@
 import { homedir } from 'node:os';
 import { join, resolve, isAbsolute } from 'node:path';
 import { existsSync, mkdirSync } from 'node:fs';
+import { Storage, StorageError } from './storage.js';
 
 const DEFAULT_DIR_NAME = 'coding-effectiveness-tracker';
 
@@ -51,4 +52,49 @@ export function ensureDataDir(dataDir: string): string {
 export function isInitialized(dataDir: string): boolean {
   const resolved = resolveDataDir(dataDir);
   return existsSync(join(resolved, 'tracker.db'));
+}
+
+/**
+ * Auto-initialize the workspace if not already initialized.
+ * Creates the data directory, SQLite database, and default tool records silently.
+ * Used by command handlers so users don't need to run "cet init" explicitly.
+ */
+export function ensureInitialized(dataDir: string): void {
+  if (isInitialized(dataDir)) return;
+
+  const resolved = resolveDataDir(dataDir);
+  ensureDataDir(resolved);
+
+  let storage: Storage | undefined;
+  try {
+    storage = Storage.open({ dataDir: resolved });
+    const db = storage.db;
+
+    const defaultTools = [
+      { id: "codex", name: "codex", display_name: "Codex" },
+      { id: "opencode", name: "opencode", display_name: "OpenCode" },
+      { id: "factory-droid", name: "factory-droid", display_name: "Factory Droid" },
+      { id: "claude-code", name: "claude-code", display_name: "Claude Code" },
+      { id: "cursor", name: "cursor", display_name: "Cursor" },
+    ];
+
+    const insertTool = db.prepare(
+      "INSERT OR IGNORE INTO tools (id, name, display_name) VALUES (?, ?, ?)",
+    );
+
+    const insertAll = db.transaction(() => {
+      for (const tool of defaultTools) {
+        insertTool.run(tool.id, tool.name, tool.display_name);
+      }
+    });
+    insertAll();
+
+    storage.close();
+  } catch (err) {
+    if (err instanceof StorageError) {
+      console.error('Error: Failed to auto-initialize workspace: ' + err.message);
+      process.exit(1);
+    }
+    throw err;
+  }
 }
