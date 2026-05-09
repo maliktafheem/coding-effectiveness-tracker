@@ -44,7 +44,7 @@ export async function handleExport(opts: ExportOptions): Promise<void> {
     throw err;
   }
   try {
-    const filterOpts = { toolId: opts.tool, projectId: opts.project, from: opts.from, to: opts.to };
+    const filterOpts = { toolId: opts.tool, projectId: opts.project, from: opts.from, to: opts.to, dataDir: opts.dataDir };
     let content: string;
     if (format === 'json') {
       const data = generateJsonExport(storage, filterOpts);

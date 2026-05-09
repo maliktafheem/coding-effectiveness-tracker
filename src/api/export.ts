@@ -1,5 +1,6 @@
 import type { Storage } from '../storage.js';
 import { computeEffectivenessScore } from '../scoring/effectiveness.js';
+import { loadScoringConfig } from '../scoring/config.js';
 
 export interface ExportOptions {
   toolId?: string;
@@ -7,6 +8,7 @@ export interface ExportOptions {
   from?: string;
   to?: string;
   raw?: boolean;
+  dataDir?: string;
 }
 
 export interface JsonExport {
@@ -48,8 +50,10 @@ export function generateJsonExport(storage: Storage, opts: ExportOptions): JsonE
       generatedAt: new Date().toISOString(),
     };
   }
+  const scoreConfig = loadScoringConfig(opts.dataDir);
   const score = computeEffectivenessScore(storage, {
     toolId: opts.toolId, projectId: opts.projectId, from: opts.from, to: opts.to,
+    weights: scoreConfig.weights,
   });
   const tools = [...new Set(sessions.map(s => s.source_tool_id as string))];
   const enriched = sessions.map(s => {

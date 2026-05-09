@@ -10,6 +10,8 @@
 
 import type Database from 'better-sqlite3';
 import type { Storage } from '../storage.js';
+import type { ScoringWeights } from './config.js';
+import { DEFAULT_WEIGHTS } from './config.js';
 
 export interface ScoreDimension {
   name: string;
@@ -32,6 +34,8 @@ export interface ScoreOptions {
   toolId?: string;
   from?: string;
   to?: string;
+  /** Custom scoring weights (defaults to DEFAULT_WEIGHTS). */
+  weights?: Partial<ScoringWeights>;
 }
 
 /**
@@ -44,6 +48,7 @@ export function computeEffectivenessScore(
   options: ScoreOptions,
 ): EffectivenessScore {
   const db = storage.db;
+  const weights: ScoringWeights = { ...DEFAULT_WEIGHTS, ...options.weights };
 
   // Build session query with filters
   let sessionQuery = 'SELECT * FROM sessions WHERE 1=1';
@@ -84,41 +89,41 @@ export function computeEffectivenessScore(
   dimensions.push({
     name: 'activity-output',
     value: activityScore,
-    weight: 0.15,
+    weight: weights['activity-output'],
     explanation: `${sessionCount} AI session(s) completed in the selected period.`,
     available: sessionCount > 0,
   });
 
   // ─── Dimension 2: Git Correlation ──────────────────────────────────────
-  const gitDim = computeGitDimension(db, sessions);
+  const gitDim = computeGitDimension(db, sessions, weights);
   dimensions.push(gitDim);
   if (!gitDim.available) {
     missingInputs.push('Git correlation data not available - no matching commits found for sessions.');
   }
 
   // ─── Dimension 3: Test Confidence ──────────────────────────────────────
-  const testDim = computeTestDimension(db, sessions, options);
+  const testDim = computeTestDimension(db, sessions, options, weights);
   dimensions.push(testDim);
   if (!testDim.available) {
     missingInputs.push('Test outcome data not available - no test results linked to sessions.');
   }
 
   // ─── Dimension 4: Manual Outcome ───────────────────────────────────────
-  const manualDim = computeManualOutcomeDimension(db, sessions);
+  const manualDim = computeManualOutcomeDimension(db, sessions, weights);
   dimensions.push(manualDim);
   if (!manualDim.available) {
     missingInputs.push('Manual outcome annotations not available - no user ratings recorded.');
   }
 
   // ─── Dimension 5: Cost Efficiency ──────────────────────────────────────
-  const costDim = computeCostDimension(sessions);
+  const costDim = computeCostDimension(sessions, weights);
   dimensions.push(costDim);
   if (!costDim.available) {
     missingInputs.push('Cost/token data not available for some or all sessions - shown as unknown, not zero.');
   }
 
   // ─── Dimension 6: Rework Indicator ─────────────────────────────────────
-  const reworkDim = computeReworkDimension(sessions);
+  const reworkDim = computeReworkDimension(sessions, weights);
   dimensions.push(reworkDim);
 
   // ─── Aggregate Score ───────────────────────────────────────────────────
@@ -146,9 +151,10 @@ export function computeEffectivenessScore(
 function computeGitDimension(
   db: Database.Database,
   sessions: Record<string, unknown>[],
+  weights: ScoringWeights,
 ): ScoreDimension {
   if (sessions.length === 0) {
-    return { name: 'git-correlation', value: 0, weight: 0.25, explanation: 'No sessions to correlate with git.', available: false };
+    return { name: 'git-correlation', value: 0, weight: weights['git-correlation'], explanation: 'No sessions to correlate with git.', available: false };
   }
 
   let correlatedCount = 0;
@@ -166,7 +172,7 @@ function computeGitDimension(
   return {
     name: 'git-correlation',
     value: score,
-    weight: 0.25,
+    weight: weights['git-correlation'],
     explanation: `${correlatedCount} of ${sessions.length} sessions correlated with git commits (${Math.round(score * 100)}%).`,
     available: hasData,
   };
@@ -176,6 +182,7 @@ function computeTestDimension(
   db: Database.Database,
   sessions: Record<string, unknown>[],
   options: ScoreOptions,
+  weights: ScoringWeights,
 ): ScoreDimension {
   // When a --tool filter is active, test-confidence must be scoped to only
   // those sessions. If no sessions match the tool filter, or matching sessions
@@ -185,7 +192,7 @@ function computeTestDimension(
     return {
       name: 'test-confidence',
       value: 0,
-      weight: 0.25,
+      weight: weights['test-confidence'],
       explanation: 'No sessions matched the tool filter - test confidence not available.',
       available: false,
     };
@@ -233,7 +240,7 @@ function computeTestDimension(
   const filteredTestOutcomes = db.prepare(testQuery).all(...params) as Record<string, unknown>[];
 
   if (filteredTestOutcomes.length === 0) {
-    return { name: 'test-confidence', value: 0, weight: 0.25, explanation: 'No test outcome data available.', available: false };
+    return { name: 'test-confidence', value: 0, weight: weights['test-confidence'], explanation: 'No test outcome data available.', available: false };
   }
 
   let totalPassed = 0;
@@ -260,7 +267,7 @@ function computeTestDimension(
   return {
     name: 'test-confidence',
     value: Math.round(score * 1000) / 1000,
-    weight: 0.25,
+    weight: weights['test-confidence'],
     explanation: 'Test pass rate: ' + Math.round(passRate * 100) + '% (' + totalPassed + '/' + total + ' passed). ' + correlatedWithTests + ' sessions linked to test outcomes.',
     available: true,
   };
@@ -269,9 +276,10 @@ function computeTestDimension(
 function computeManualOutcomeDimension(
   db: Database.Database,
   sessions: Record<string, unknown>[],
+  weights: ScoringWeights,
 ): ScoreDimension {
   if (sessions.length === 0) {
-    return { name: 'manual-outcome', value: 0, weight: 0.15, explanation: 'No sessions available.', available: false };
+    return { name: 'manual-outcome', value: 0, weight: weights['manual-outcome'], explanation: 'No sessions available.', available: false };
   }
 
   let totalScore = 0;
@@ -289,14 +297,14 @@ function computeManualOutcomeDimension(
   }
 
   if (count === 0) {
-    return { name: 'manual-outcome', value: 0, weight: 0.15, explanation: 'No manual outcome annotations recorded.', available: false };
+    return { name: 'manual-outcome', value: 0, weight: weights['manual-outcome'], explanation: 'No manual outcome annotations recorded.', available: false };
   }
 
   const avgScore = totalScore / count;
   return {
     name: 'manual-outcome',
     value: Math.round(avgScore * 1000) / 1000,
-    weight: 0.15,
+    weight: weights['manual-outcome'],
     explanation: `Average manual outcome score: ${Math.round(avgScore * 100)}% from ${count} annotation(s).`,
     available: true,
   };
@@ -304,6 +312,7 @@ function computeManualOutcomeDimension(
 
 function computeCostDimension(
   sessions: Record<string, unknown>[],
+  weights: ScoringWeights,
 ): ScoreDimension {
   let sessionsWithCost = 0;
   let totalCost = 0;
@@ -323,7 +332,7 @@ function computeCostDimension(
     return {
       name: 'cost-efficiency',
       value: 0,
-      weight: 0.10,
+      weight: weights['cost-efficiency'],
       explanation: 'Cost/token data not available for any session - reported as unknown.',
       available: false,
     };
@@ -335,7 +344,7 @@ function computeCostDimension(
   return {
     name: 'cost-efficiency',
     value: Math.round(costScore * 1000) / 1000,
-    weight: 0.10,
+    weight: weights['cost-efficiency'],
     explanation: `${sessionsWithCost} session(s) with cost data. Total cost: $${totalCost.toFixed(2)}, Tokens: ${totalTokensIn} in / ${totalTokensOut} out. Avg: $${avgCost.toFixed(3)}/session.`,
     available: true,
   };
@@ -343,6 +352,7 @@ function computeCostDimension(
 
 function computeReworkDimension(
   sessions: Record<string, unknown>[],
+  weights: ScoringWeights,
 ): ScoreDimension {
   let totalRework = 0;
   let sessionsWithRework = 0;
@@ -362,7 +372,7 @@ function computeReworkDimension(
   }
 
   if (sessions.length === 0) {
-    return { name: 'rework-indicator', value: 1, weight: 0.10, explanation: 'No sessions to evaluate rework.', available: false };
+    return { name: 'rework-indicator', value: 1, weight: weights['rework-indicator'], explanation: 'No sessions to evaluate rework.', available: false };
   }
 
   const reworkRatio = sessionsWithRework / sessions.length;
@@ -372,7 +382,7 @@ function computeReworkDimension(
     return {
       name: 'rework-indicator',
       value: Math.round(score * 1000) / 1000,
-      weight: 0.10,
+      weight: weights['rework-indicator'],
       explanation: `${sessionsWithRework} of ${sessions.length} session(s) had rework/retry attempts (${totalRework} total retries). Rework rate: ${Math.round(reworkRatio * 100)}%.`,
       available: true,
     };
@@ -381,7 +391,7 @@ function computeReworkDimension(
   return {
     name: 'rework-indicator',
     value: 1,
-    weight: 0.10,
+    weight: weights['rework-indicator'],
     explanation: 'No rework or retry indicators detected in session metadata.',
     available: true,
   };
