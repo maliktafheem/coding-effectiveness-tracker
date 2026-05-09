@@ -4,10 +4,29 @@
  * Matches AI coding sessions with Git commits, test outcomes, and manual
  * annotations using confidence scoring. Correlation is purely local —
  * no remote API calls.
+ *
+ * Time windows are configurable via CorrelationOptions. Defaults:
+ *   - Git commit buffer: ±30 minutes around session
+ *   - Test outcome window: session start to +1hr after session end
  */
 
 import { randomUUID } from 'node:crypto';
 import type { Storage } from '../storage.js';
+
+export interface CorrelationOptions {
+  /** Minutes before session start to include commits (default: 30). */
+  gitBeforeMinutes?: number;
+  /** Minutes after session end to include commits (default: 30). */
+  gitAfterMinutes?: number;
+  /** Maximum hours after session end to include test outcomes (default: 1). */
+  testAfterHours?: number;
+}
+
+const DEFAULTS: Required<CorrelationOptions> = {
+  gitBeforeMinutes: 30,
+  gitAfterMinutes: 30,
+  testAfterHours: 1,
+};
 
 export interface CorrelationResult {
   correlationId: string;
@@ -24,8 +43,10 @@ export interface CorrelationResult {
 export function correlateSession(
   storage: Storage,
   sessionId: string,
+  opts: CorrelationOptions = {},
 ): CorrelationResult[] {
   const db = storage.db;
+  const options: Required<CorrelationOptions> = { ...DEFAULTS, ...opts };
 
   const session = db.prepare('SELECT * FROM sessions WHERE id = ?').get(sessionId) as Record<string, unknown> | undefined;
   if (!session) return [];
@@ -36,11 +57,11 @@ export function correlateSession(
   db.prepare('DELETE FROM correlations WHERE session_id = ?').run(sessionId);
 
   // 1. Correlate with Git commits
-  const gitCorrelations = correlateWithGitCommits(storage, session);
+  const gitCorrelations = correlateWithGitCommits(storage, session, options);
   results.push(...gitCorrelations);
 
   // 2. Correlate with test outcomes
-  const testCorrelations = correlateWithTestOutcomes(storage, session);
+  const testCorrelations = correlateWithTestOutcomes(storage, session, options);
   results.push(...testCorrelations);
 
   // 3. Correlate with manual outcomes
@@ -76,6 +97,7 @@ export function correlateSession(
 function correlateWithGitCommits(
   storage: Storage,
   session: Record<string, unknown>,
+  options: Required<CorrelationOptions>,
 ): CorrelationResult[] {
   const db = storage.db;
   const sessionStart = session.started_at as string | null;
@@ -84,11 +106,10 @@ function correlateWithGitCommits(
 
   if (!sessionStart) return [];
 
-  // Find git commits that overlap with the session time window
-  // Expand window by 30 minutes on each side for fuzzy matching
-  const windowStart = new Date(new Date(sessionStart).getTime() - 30 * 60 * 1000).toISOString();
+  // Expand window by configured minutes on each side for fuzzy matching
+  const windowStart = new Date(new Date(sessionStart).getTime() - options.gitBeforeMinutes * 60 * 1000).toISOString();
   const windowEnd = sessionEnd
-    ? new Date(new Date(sessionEnd).getTime() + 30 * 60 * 1000).toISOString()
+    ? new Date(new Date(sessionEnd).getTime() + options.gitAfterMinutes * 60 * 1000).toISOString()
     : new Date(new Date(sessionStart).getTime() + 2 * 60 * 60 * 1000).toISOString();
 
   let query = 'SELECT * FROM git_commits WHERE authored_at >= ? AND authored_at <= ?';
@@ -103,7 +124,7 @@ function correlateWithGitCommits(
   const results: CorrelationResult[] = [];
 
   for (const commit of commits) {
-    const { confidence, reasons } = calculateGitConfidence(session, commit);
+    const { confidence, reasons } = calculateGitConfidence(session, commit, options);
     if (confidence > 0) {
       results.push({
         correlationId: randomUUID(),
@@ -124,9 +145,11 @@ function correlateWithGitCommits(
 function calculateGitConfidence(
   session: Record<string, unknown>,
   commit: Record<string, unknown>,
+  options?: Required<CorrelationOptions>,
 ): { confidence: number; reasons: string[] } {
   let confidence = 0;
   const reasons: string[] = [];
+  const buf = options?.gitBeforeMinutes ?? 30;
 
   const sessionStart = new Date(session.started_at as string).getTime();
   const sessionEnd = session.ended_at
@@ -146,10 +169,10 @@ function calculateGitConfidence(
     const proximityScore = 1 - (distance / halfDuration);
     confidence += proximityScore * 0.2;
     reasons.push('commit time proximity to session midpoint');
-  } else if (commitTime >= sessionStart - 30 * 60 * 1000 && commitTime <= sessionEnd + 30 * 60 * 1000) {
+  } else if (commitTime >= sessionStart - buf * 60 * 1000 && commitTime <= sessionEnd + buf * 60 * 1000) {
     // Within fuzzy window but outside session
     confidence += 0.2;
-    reasons.push('commit timestamp near session window (within 30min buffer)');
+    reasons.push(`commit timestamp near session window (within ${buf}min buffer)`);
   }
 
   // Project match
@@ -167,6 +190,7 @@ function calculateGitConfidence(
 function correlateWithTestOutcomes(
   storage: Storage,
   session: Record<string, unknown>,
+  options: Required<CorrelationOptions>,
 ): CorrelationResult[] {
   const db = storage.db;
   const sessionStart = session.started_at as string | null;
@@ -176,9 +200,10 @@ function correlateWithTestOutcomes(
   if (!sessionStart) return [];
 
   // Look for test outcomes run during or shortly after the session
+  const testAfterMs = options.testAfterHours * 60 * 60 * 1000;
   const windowStart = sessionStart;
   const windowEnd = sessionEnd
-    ? new Date(new Date(sessionEnd).getTime() + 60 * 60 * 1000).toISOString() // 1 hour after session end
+    ? new Date(new Date(sessionEnd).getTime() + testAfterMs).toISOString()
     : new Date(new Date(sessionStart).getTime() + 4 * 60 * 60 * 1000).toISOString();
 
   let query = 'SELECT * FROM test_outcomes WHERE run_at >= ? AND run_at <= ?';
