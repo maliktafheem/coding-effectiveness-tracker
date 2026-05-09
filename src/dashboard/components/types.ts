@@ -36,3 +36,8 @@ export interface ProjectInfo {
 }
 
 export type Page = 'overview' | 'timeline' | 'tools' | 'export';
+
+export interface TrendData {
+  points: { weekStart: string; weekEnd: string; sessionCount: number; sessionsWithGit: number; totalTestsPassed: number; totalTestsFailed: number; scoreAggregate: number }[];
+  period: { from: string | null; to: string | null };
+}

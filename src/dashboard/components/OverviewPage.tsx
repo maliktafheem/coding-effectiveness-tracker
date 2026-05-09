@@ -1,4 +1,5 @@
 import { useFetch } from './useFetch';
+import TrendChart from './TrendChart';
 import type { OverviewData } from './types';
 
 const DIMENSION_HINTS: Record<string, string> = {
@@ -59,6 +60,8 @@ export default function OverviewPage({ filterStr }: { filterStr: string }) {
           <div className="score-bar"><div className="score-fill" style={{ width: pct + '%', background: fillColor }}></div></div>
         </div>
       </div>
+
+      <TrendChart filterStr={filterStr} />
 
       <div className="card">
         <h2>Score Dimensions</h2>

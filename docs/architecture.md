@@ -31,9 +31,8 @@ All data stays on the user's machine. There is no cloud backend, no telemetry, a
        ▼
 ┌────────────────────────────────────────────────────────────┐
 │                     Storage (better-sqlite3)                │
-│  10 tables: projects, tools, sessions, events, git_commits, │
-│  session_commits, test_outcomes, outcomes, correlations,    │
-│  _migrations                                                │
+│  9 tables: projects, tools, sessions, events, git_commits,  │
+│  test_outcomes, outcomes, correlations, _migrations           │
 └──────┬─────────────────────────────────────────────────────┘
        │
        ▼

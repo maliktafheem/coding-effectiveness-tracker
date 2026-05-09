@@ -13,11 +13,10 @@ All timestamps are ISO 8601 strings stored as TEXT.
 | 3 | `sessions` | AI coding sessions (main entity) |
 | 4 | `events` | Event records within sessions |
 | 5 | `git_commits` | Local git commit metadata |
-| 6 | `session_commits` | Many-to-many session ↔ commit join |
-| 7 | `test_outcomes` | Test result records |
-| 8 | `outcomes` | Manual outcome annotations |
-| 9 | `correlations` | Correlation records (session ↔ signal) |
-| 10 | `_migrations` | Migration tracking (internal) |
+| 6 | `test_outcomes` | Test result records |
+| 7 | `outcomes` | Manual outcome annotations |
+| 8 | `correlations` | Correlation records (session ↔ signal) |
+| 9 | `_migrations` | Migration tracking (internal) |
 
 ---
 
@@ -133,22 +132,6 @@ Git commit metadata collected from local repositories via `cet sync`. No remote 
 
 ---
 
-## `session_commits`
-
-Many-to-many relationship between sessions and git commits, with correlation confidence.
-
-| Column | Type | Constraints | Description |
-|--------|------|-------------|-------------|
-| `session_id` | TEXT | NOT NULL, FK → sessions(id) | Session UUID |
-| `commit_id` | TEXT | NOT NULL, FK → git_commits(id) | Commit UUID |
-| `confidence` | REAL | NOT NULL, DEFAULT 0.0 | Correlation confidence (0–1) |
-| `created_at` | TEXT | NOT NULL, DEFAULT now | Creation timestamp |
-
-**Primary key:** `(session_id, commit_id)`
-**Indexes:** None beyond composite PRIMARY KEY.
-
----
-
 ## `test_outcomes`
 
 Test result records ingested via `cet test-outcome`. Each record represents a single test command run.
@@ -247,8 +230,6 @@ projects ──────┬──── sessions ────── events
                │         ├──── outcomes
                │         │
                │         ├──── correlations ──── (git_commits, test_outcomes, outcomes)
-               │         │
-               │         └──── session_commits ──── git_commits
                │
 tools ─────────┘
 ```
@@ -257,6 +238,5 @@ tools ─────────┘
 - **events** belongs to **sessions**
 - **outcomes** belongs to **sessions**
 - **correlations** belongs to **sessions** and polymorphically references git_commits, test_outcomes, or outcomes via `target_id` + `correlation_type`
-- **session_commits** is a many-to-many join between **sessions** and **git_commits**
 - **test_outcomes** optionally references **sessions**, **git_commits**, and **projects**
 - **git_commits** belongs to **projects**
