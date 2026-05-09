@@ -1,6 +1,7 @@
 import type { Storage } from '../storage.js';
 import { computeEffectivenessScore } from '../scoring/effectiveness.js';
 import { loadScoringConfig } from '../scoring/config.js';
+import type { ScoreContract } from './contract.js';
 
 export interface ExportOptions {
   toolId?: string;
@@ -12,7 +13,7 @@ export interface ExportOptions {
 }
 
 export interface JsonExport {
-  score: { aggregate: number; dimensions: unknown[]; missingInputs: string[] };
+  score: ScoreContract;
   sessions: Record<string, unknown>[];
   tools: string[];
   totalSessions: number;

@@ -8,6 +8,20 @@ import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { generateJsonExport, generateMarkdownExport } from './export.js';
 import { computeTrends } from '../analytics/trends.js';
+import type {
+  ErrorResponse,
+  HealthResponse,
+  AvailableToolsResponse,
+  OverviewResponse,
+  TimelineResponse,
+  ToolsResponse,
+  ProjectsResponse,
+  TrendsResponse,
+  SessionDetailResponse,
+  AnnotationCreateResponse,
+  AnnotationPatchResponse,
+  JsonExportResponse,
+} from './contract.js';
 
 const VALID_OUTCOMES = new Set([
   'good','accepted','merged','shipped','ok','neutral','partial',
@@ -84,11 +98,11 @@ function parseFilterParams(q: Record<string, string>, reply: { code: (c: number)
 export function registerRoutes(app: FastifyInstance, opts: ServerOptions): void {
   const dataDir = resolveDataDir(opts.dataDir);
 
-  app.get('/health', async () => {
+  app.get('/health', async (): Promise<HealthResponse> => {
     return { status: 'ok', timestamp: new Date().toISOString() };
   });
 
-  app.get('/api/available-tools', async () => {
+  app.get('/api/available-tools', async (): Promise<AvailableToolsResponse> => {
     if (!isInitialized(dataDir)) return { tools: [] };
     const storage = Storage.open({ dataDir });
     try {
@@ -101,16 +115,16 @@ export function registerRoutes(app: FastifyInstance, opts: ServerOptions): void 
     } finally { storage.close(); }
   });
 
-  app.get('/api/trends', async (request) => {
+  app.get('/api/trends', async (request): Promise<TrendsResponse> => {
     if (!isInitialized(dataDir)) return { points: [], period: { from: null, to: null } };
     const q = request.query as Record<string, string>;
     const storage = Storage.open({ dataDir });
     try { return computeTrends(storage, q.project); } finally { storage.close(); }
   });
 
-  app.get('/api/overview', async (request, reply) => {
+  app.get('/api/overview', async (request, reply): Promise<OverviewResponse | ErrorResponse | undefined> => {
     if (!isInitialized(dataDir)) {
-      return reply.code(503).send({ error: 'Not initialized', message: 'Run cet init first' });
+      return reply.code(503).send({ error: 'Not initialized' });
     }
     const q = request.query as Record<string, string>;
     const filters = parseFilterParams(q, reply);
@@ -159,7 +173,7 @@ export function registerRoutes(app: FastifyInstance, opts: ServerOptions): void 
     } finally { storage.close(); }
   });
 
-  app.get('/api/timeline', async (request, reply) => {
+  app.get('/api/timeline', async (request, reply): Promise<TimelineResponse | ErrorResponse | undefined> => {
     const q = request.query as Record<string, string>;
     if (!isInitialized(dataDir)) return { sessions: [], total: 0 };
     const filters = parseFilterParams(q, reply);
@@ -211,9 +225,15 @@ export function registerRoutes(app: FastifyInstance, opts: ServerOptions): void 
           } catch { /* ignore */ }
         }
         return {
-          id: s.id, sourceToolId: s.source_tool_id, projectId: s.project_id,
-          externalId: s.external_id, startedAt: s.started_at, endedAt: s.ended_at,
-          durationMs: s.duration_ms, summary: s.summary, model: s.model,
+          id: s.id as string,
+          sourceToolId: s.source_tool_id as string,
+          projectId: (s.project_id as string | null) ?? null,
+          externalId: (s.external_id as string | null) ?? null,
+          startedAt: (s.started_at as string | null) ?? null,
+          endedAt: (s.ended_at as string | null) ?? null,
+          durationMs: (s.duration_ms as number | null) ?? null,
+          summary: (s.summary as string | null) ?? null,
+          model: (s.model as string | null) ?? null,
           correlationCount: corrCount,
           outcomeCount: outcomes.length,
           outcomeLabels,
@@ -225,7 +245,7 @@ export function registerRoutes(app: FastifyInstance, opts: ServerOptions): void 
     } finally { storage.close(); }
   });
 
-  app.get('/api/tools', async (request, reply) => {
+  app.get('/api/tools', async (request, reply): Promise<ToolsResponse | ErrorResponse | undefined> => {
     if (!isInitialized(dataDir)) return { tools: [] };
     const q = request.query as Record<string, string>;
     const filters = parseFilterParams(q, reply);
@@ -291,7 +311,7 @@ export function registerRoutes(app: FastifyInstance, opts: ServerOptions): void 
     } finally { storage.close(); }
   });
 
-  app.get('/api/projects', async () => {
+  app.get('/api/projects', async (): Promise<ProjectsResponse> => {
     if (!isInitialized(dataDir)) return { projects: [] };
     const storage = Storage.open({ dataDir });
     try {
@@ -305,7 +325,7 @@ export function registerRoutes(app: FastifyInstance, opts: ServerOptions): void 
     } finally { storage.close(); }
   });
 
-  app.get('/api/sessions/:id', async (request, reply) => {
+  app.get('/api/sessions/:id', async (request, reply): Promise<SessionDetailResponse | ErrorResponse> => {
     const { id } = request.params as { id: string };
     if (!isInitialized(dataDir)) return reply.code(503).send({ error: 'Not initialized' });
     const storage = Storage.open({ dataDir });
@@ -314,11 +334,18 @@ export function registerRoutes(app: FastifyInstance, opts: ServerOptions): void 
       const session = db.prepare('SELECT * FROM sessions WHERE id = ?').get(id) as Record<string, unknown> | undefined;
       if (!session) return reply.code(404).send({ error: 'Session not found' });
       const correlations = (db.prepare('SELECT * FROM correlations WHERE session_id = ?').all(id) as Record<string, unknown>[]).map(c => ({
-        id: c.id, type: c.correlation_type, targetId: c.target_id, confidence: c.confidence,
-        reasons: c.metadata_json ? JSON.parse(c.metadata_json as string).reasons : [],
+        id: c.id as string,
+        type: c.correlation_type as string,
+        targetId: (c.target_id as string | null) ?? null,
+        confidence: c.confidence as number,
+        reasons: c.metadata_json ? (JSON.parse(c.metadata_json as string).reasons as string[]) : [] as string[],
       }));
       const outcomes = (db.prepare('SELECT * FROM outcomes WHERE session_id = ?').all(id) as Record<string, unknown>[]).map(o => ({
-        id: o.id, type: o.outcome_type, label: o.label, score: o.score, note: o.note,
+        id: o.id as string,
+        type: o.outcome_type as string,
+        label: o.label as string,
+        score: (o.score as number | null) ?? null,
+        note: (o.note as string | null) ?? null,
       }));
       let reworkCount = 0;
       let sessionMetadata: Record<string, unknown> | null = null;
@@ -330,18 +357,25 @@ export function registerRoutes(app: FastifyInstance, opts: ServerOptions): void 
         } catch { /* ignore */ }
       }
       return {
-        id: session.id, sourceToolId: session.source_tool_id, projectId: session.project_id,
-        externalId: session.external_id, startedAt: session.started_at, endedAt: session.ended_at,
-        durationMs: session.duration_ms, summary: session.summary, model: session.model,
-        tokensInput: session.tokens_input, tokensOutput: session.tokens_output,
-        costEstimate: session.cost_estimate,
+        id: session.id as string,
+        sourceToolId: session.source_tool_id as string,
+        projectId: (session.project_id as string | null) ?? null,
+        externalId: (session.external_id as string | null) ?? null,
+        startedAt: (session.started_at as string | null) ?? null,
+        endedAt: (session.ended_at as string | null) ?? null,
+        durationMs: (session.duration_ms as number | null) ?? null,
+        summary: (session.summary as string | null) ?? null,
+        model: (session.model as string | null) ?? null,
+        tokensInput: (session.tokens_input as number | null) ?? null,
+        tokensOutput: (session.tokens_output as number | null) ?? null,
+        costEstimate: (session.cost_estimate as number | null) ?? null,
         metadata: sessionMetadata, reworkCount,
         correlations, outcomes, uncorrelated: correlations.length === 0,
       };
     } finally { storage.close(); }
   });
 
-  app.post('/api/sessions/:id/annotations', async (request, reply) => {
+  app.post('/api/sessions/:id/annotations', async (request, reply): Promise<AnnotationCreateResponse | ErrorResponse> => {
     const { id } = request.params as { id: string };
     if (!id || typeof id !== 'string' || id.trim() === '') {
       return reply.code(400).send({ error: 'Session ID is required' });
@@ -383,7 +417,7 @@ export function registerRoutes(app: FastifyInstance, opts: ServerOptions): void 
     } finally { storage.close(); }
   });
 
-  app.patch('/api/annotations/:id', async (request, reply) => {
+  app.patch('/api/annotations/:id', async (request, reply): Promise<AnnotationPatchResponse | ErrorResponse> => {
     const { id } = request.params as { id: string };
     if (!isInitialized(dataDir)) return reply.code(503).send({ error: 'Not initialized' });
     const storage = Storage.open({ dataDir });
@@ -420,13 +454,13 @@ export function registerRoutes(app: FastifyInstance, opts: ServerOptions): void 
       const note = body.note ?? (existing.note as string | null);
       db.prepare('UPDATE outcomes SET label = ?, score = ?, note = ?, updated_at = datetime(\'now\') WHERE id = ?')
         .run(outcome, score, note, id);
-      return { id, sessionId: existing.session_id, outcome, score, note };
+      return { id, sessionId: existing.session_id as string, outcome, score, note };
     } finally { storage.close(); }
   });
 
-  app.get('/api/export/json', async (request, reply) => {
+  app.get('/api/export/json', async (request, reply): Promise<JsonExportResponse | ErrorResponse | undefined> => {
     const q = request.query as Record<string, string>;
-    if (!isInitialized(dataDir)) return { sessions: [], score: { aggregate: 0 }, tools: [], empty: true };
+    if (!isInitialized(dataDir)) return { sessions: [], score: { aggregate: 0, dimensions: [], missingInputs: [] }, tools: [], totalSessions: 0, period: { from: null, to: null }, empty: true, generatedAt: new Date().toISOString() };
     const filters = parseFilterParams(q, reply);
     if (!filters) return;
 
@@ -439,7 +473,7 @@ export function registerRoutes(app: FastifyInstance, opts: ServerOptions): void 
     } finally { storage.close(); }
   });
 
-  app.get('/api/export/markdown', async (request, reply) => {
+  app.get('/api/export/markdown', async (request, reply): Promise<string | ErrorResponse | undefined> => {
     const q = request.query as Record<string, string>;
     if (!isInitialized(dataDir)) return reply.type('text/markdown').send('# No Data\nNo sessions available.');
     const filters = parseFilterParams(q, reply);
