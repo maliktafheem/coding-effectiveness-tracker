@@ -51,7 +51,9 @@
   "files": [
     "dist",
     "bin",
-    "README.md"
+    "README.md",
+    "LICENSE",
+    "docs"
   ],
   "dependencies": {
     "@fastify/static": "^9.1.3",
