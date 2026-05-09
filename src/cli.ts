@@ -1,5 +1,6 @@
 import { Command } from 'commander';
 import { VERSION } from './version.js';
+import { handleSetup } from './commands/setup.js';
 import { handleInit } from './commands/init.js';
 import { handleImport } from './commands/import.js';
 import { handleReport } from './commands/report.js';
@@ -21,6 +22,15 @@ program
     'All data stays on your machine. No telemetry. No hosted backend.',
   )
   .version(VERSION, '-v, --version', 'Output the current version');
+
+program
+  .command('setup')
+  .description('One-command onboarding: initialize, discover AI tools, sync git, and start the dashboard')
+  .option('-d, --data-dir <path>', 'Custom data directory path')
+  .option('--port <port>', 'Dashboard port (default: 43187)')
+  .option('--no-serve', 'Skip starting the dashboard server')
+  .option('--interactive', 'Ask which tools to import and which repo to sync')
+  .action(handleSetup);
 
 program
   .command('init')
