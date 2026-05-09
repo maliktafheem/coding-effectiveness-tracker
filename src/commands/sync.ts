@@ -12,11 +12,12 @@
  */
 
 import { existsSync, statSync } from 'node:fs';
-import { join, resolve, isAbsolute, basename } from 'node:path';
+import { join, resolve, isAbsolute } from 'node:path';
 import { resolveDataDir, ensureInitialized } from '../config.js';
 import { Storage, StorageError } from '../storage.js';
 import { collectGitSignals, storeGitSignals } from '../collectors/git.js';
 import { correlateSession } from '../correlation/engine.js';
+import { deriveProjectId, deriveProjectName } from '../project-identity.js';
 
 interface SyncOptions {
   dataDir?: string;
@@ -67,8 +68,7 @@ export async function handleSync(opts: SyncOptions): Promise<void> {
     // Determine or create project ID
     let projectId = opts.project;
     if (!projectId) {
-      // Auto-derive project ID from repo directory name
-      projectId = basename(repoPath).toLowerCase().replace(/[^a-z0-9-]/g, '-');
+      projectId = deriveProjectId(repoPath);
     }
 
     // Ensure project exists
@@ -76,7 +76,7 @@ export async function handleSync(opts: SyncOptions): Promise<void> {
     if (!existingProject) {
       db.prepare('INSERT INTO projects (id, name, path) VALUES (?, ?, ?)').run(
         projectId,
-        basename(repoPath),
+        deriveProjectName(repoPath),
         repoPath,
       );
       console.log('Created project: ' + projectId);

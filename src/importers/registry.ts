@@ -10,6 +10,7 @@ import { randomUUID } from 'node:crypto';
 import type { ToolImporter, ImportOptions, ImportResult, NormalizedSession } from './types.js';
 import { redactSecrets, redactMetadata, sanitizeForOutput } from './privacy.js';
 import { Storage } from '../storage.js';
+import { deriveProjectId, deriveProjectName } from '../project-identity.js';
 
 /** All registered importers, keyed by tool id. */
 const importers = new Map<string, ToolImporter>();
@@ -112,14 +113,28 @@ export function runImport(
 
   // Auto-create projects referenced by sessions
   const ensureProject = db.prepare(
-    'INSERT OR IGNORE INTO projects (id, name) VALUES (?, ?)'
+    'INSERT OR IGNORE INTO projects (id, name, path) VALUES (?, ?, ?)'
+  );
+  const updateProjectPath = db.prepare(
+    'UPDATE projects SET path = ? WHERE id = ? AND path IS NULL'
   );
 
   const insertAll = db.transaction(() => {
     for (const session of result.sessions) {
+      // Normalize project identity when full path is available
+      const projectPath = session.metadata?.projectPath as string | undefined;
+      if (projectPath) {
+        const stableId = deriveProjectId(projectPath);
+        const displayName = deriveProjectName(projectPath);
+        ensureProject.run(stableId, displayName, projectPath);
+        // Also update if path was missing (e.g., from fixture import)
+        updateProjectPath.run(projectPath, stableId);
+        session.projectId = stableId;
+      }
+
       // Ensure project exists if referenced
       if (session.projectId) {
-        ensureProject.run(session.projectId, session.projectId);
+        ensureProject.run(session.projectId, session.projectId, null);
       }
       const toolId = session.sourceToolId || importer.toolId;
       if (!session.externalId) {
