@@ -7,6 +7,7 @@ import { handleReport } from './commands/report.js';
 import { handleAnnotate } from './commands/annotate.js';
 import { handleSync } from './commands/sync.js';
 import { handleTestOutcome } from './commands/test-outcome.js';
+import { handleCompare } from './commands/compare.js';
 import { handleServe } from './commands/serve.js';
 import { handleExport } from './commands/export.js';
 import { handleWatch } from './commands/watch.js';
@@ -88,6 +89,19 @@ program
   .option('-d, --data-dir <path>', 'Custom data directory path')
   .option('-p, --project <id>', 'Project ID (defaults to derived from cwd)')
   .allowUnknownOption()
+
+program
+  .command('compare')
+  .description('Compare effectiveness between time periods, projects, or tools')
+  .option('-d, --data-dir <path>', 'Custom data directory path')
+  .option('-p, --project <id>', 'Filter by project id')
+  .option('-t, --tool <id>', 'Filter by tool id')
+  .option('--period <mode>', 'Compare by "tools", "projects", or default time periods')
+  .option('--from1 <date>', 'Period 1 start date')
+  .option('--to1 <date>', 'Period 1 end date')
+  .option('--from2 <date>', 'Period 2 start date')
+  .option('--to2 <date>', 'Period 2 end date')
+  .action(handleCompare);
 
 program
   .command('test-outcome')

@@ -7,6 +7,7 @@ import { loadScoringConfig } from '../scoring/config.js';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { generateJsonExport, generateMarkdownExport } from './export.js';
+import { computeTrends } from '../analytics/trends.js';
 
 const VALID_OUTCOMES = new Set([
   'good','accepted','merged','shipped','ok','neutral','partial',
@@ -85,6 +86,26 @@ export function registerRoutes(app: FastifyInstance, opts: ServerOptions): void 
 
   app.get('/health', async () => {
     return { status: 'ok', timestamp: new Date().toISOString() };
+  });
+
+  app.get('/api/available-tools', async () => {
+    if (!isInitialized(dataDir)) return { tools: [] };
+    const storage = Storage.open({ dataDir });
+    try {
+      const db = storage.db;
+      const toolSessions = db.prepare('SELECT source_tool_id, count(*) as cnt FROM sessions GROUP BY source_tool_id').all() as { source_tool_id: string; cnt: number }[];
+      const allTools = db.prepare('SELECT id, display_name FROM tools ORDER BY id').all() as { id: string; display_name: string }[];
+      const tools = allTools.map((t) => ({ id: t.id, name: t.display_name || t.id, sessionCount: toolSessions.find((x) => x.source_tool_id === t.id)?.cnt || 0 }));
+      tools.sort((a, b) => { if(a.id==='claude-code')return -1;if(b.id==='claude-code')return 1;if(a.id==='opencode')return -1;if(b.id==='opencode')return 1;if(a.id==='codex')return -1;if(b.id==='codex')return 1;return a.name.localeCompare(b.name); });
+      return { tools };
+    } finally { storage.close(); }
+  });
+
+  app.get('/api/trends', async (request) => {
+    if (!isInitialized(dataDir)) return { points: [], period: { from: null, to: null } };
+    const q = request.query as Record<string, string>;
+    const storage = Storage.open({ dataDir });
+    try { return computeTrends(storage, q.project); } finally { storage.close(); }
   });
 
   app.get('/api/overview', async (request, reply) => {

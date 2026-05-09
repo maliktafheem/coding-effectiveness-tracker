@@ -16,6 +16,8 @@ const ToolsPage = lazy(() => import('./ToolsPage'));
 const ExportPage = lazy(() => import('./ExportPage'));
 const SessionDetailView = lazy(() => import('./SessionDetailView'));
 
+interface ToolEntry { id: string; name: string; sessionCount: number }
+
 function PageLoader({ children }: { children: React.ReactNode }) {
   return (
     <Suspense fallback={<div className="loading">Loading...</div>}>
@@ -31,6 +33,14 @@ export function App() {
   const [projectFilter, setProjectFilter] = useState('');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
+  const [availableTools, setAvailableTools] = useState<ToolEntry[]>([]);
+
+  useEffect(() => {
+    fetch('/api/available-tools')
+      .then(r => r.json())
+      .then(d => setAvailableTools(d.tools || []))
+      .catch(() => {});
+  }, []);
 
   // Sync page state to URL hash for refresh persistence
   useEffect(() => {
@@ -69,11 +79,7 @@ export function App() {
         <label style={{color: '#94a3b8', fontSize: '0.8rem'}}>Filter:</label>
         <select value={toolFilter} onChange={e => { setToolFilter(e.target.value); setSelectedSession(null); }}>
           <option value="">All tools</option>
-          <option value="codex">Codex</option>
-          <option value="claude-code">Claude Code</option>
-          <option value="opencode">OpenCode</option>
-          <option value="cursor">Cursor</option>
-          <option value="factory-droid">Factory Droid</option>
+          {availableTools.map(t => <option key={t.id} value={t.id}>{t.name}{t.sessionCount > 0 ? ` (${t.sessionCount})` : ''}</option>)}
         </select>
         <ProjectFilterSelect value={projectFilter} onChange={setProjectFilter} />
         <input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)} placeholder="From" />
