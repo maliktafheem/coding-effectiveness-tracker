@@ -17,13 +17,14 @@ Local-first personal tracker for understanding whether AI-assisted coding workfl
 - [Prerequisites](#prerequisites)
 - [Install, Build, and Test](#install-build-and-test)
 - [Quick Start](#quick-start)
-  - [Initialize](#1-initialize)
-  - [Import Fixture Data](#2-import-fixture-data)
-  - [Import from a Tool](#3-import-from-a-tool)
-  - [Sync with Git](#4-sync-with-git)
-  - [Annotate Sessions](#5-annotate-sessions)
-  - [Generate a Report](#6-generate-a-report)
-  - [Start the Dashboard](#7-start-the-dashboard)
+  - [One-Command Setup (Recommended)](#1-one-command-setup-recommended)
+  - [Initialize](#2-initialize)
+  - [Import Fixture Data](#3-import-fixture-data)
+  - [Import from a Tool](#4-import-from-a-tool)
+  - [Sync with Git](#5-sync-with-git)
+  - [Annotate Sessions](#6-annotate-sessions)
+  - [Generate a Report](#7-generate-a-report)
+  - [Start the Dashboard](#8-start-the-dashboard)
 - [CLI Command Reference](#cli-command-reference)
 - [Dashboard, API, and Exports](#dashboard-api-and-exports)
 - [Data Directory](#data-directory)
@@ -60,9 +61,7 @@ After building or installing globally, the CLI command is `cet`.
 
 ## Quick Start
 
-
-
-### 0. One-Command Setup (Recommended)
+### 1. One-Command Setup (Recommended)
 
 The fastest way to get started:
 
@@ -70,18 +69,22 @@ The fastest way to get started:
 cet setup
 ```
 
-This single command initializes your workspace, auto-discovers AI sessions from installed
-tools (Claude Code, Codex, OpenCode, Cursor, Factory Droid), syncs with your current Git
-repository, and starts the dashboard. Then visit **http://127.0.0.1:43187** to explore your data.
+This single command initializes your workspace, discovers AI sessions from installed tools,
+syncs with your current Git repo, and starts the dashboard. Open the printed URL to see your data.
 
-When running `cet` with no arguments, a Quick Start guide is displayed with useful links.
+Or for a lighter start without the dashboard:
 
 ```powershell
-cet
+cet setup --no-serve
 ```
 
+For step-by-step guidance, use interactive mode:
 
-### 1. Initialize
+```powershell
+cet setup --interactive
+```
+
+### 2. Initialize
 
 Initialize the local workspace and SQLite database:
 
@@ -89,7 +92,7 @@ Initialize the local workspace and SQLite database:
 cet init
 ```
 
-### 2. Import Fixture Data
+### 3. Import Fixture Data
 
 Try the tool with bundled sample data:
 
@@ -97,7 +100,7 @@ Try the tool with bundled sample data:
 cet import --fixture tests/fixtures/sessions-fixture.json
 ```
 
-### 3. Import from a Tool
+### 4. Import from a Tool
 
 Import sessions from a supported local AI coding tool:
 
@@ -107,7 +110,7 @@ cet import --tool claude-code --discover
 
 Supported tools: `claude-code`, `codex`, `opencode`, `cursor`, `factory-droid`.
 
-### 4. Sync with Git
+### 5. Sync with Git
 
 Correlate sessions with a local Git repository:
 
@@ -115,7 +118,7 @@ Correlate sessions with a local Git repository:
 cet sync --repo C:\path\to\repo
 ```
 
-### 5. Annotate Sessions
+### 6. Annotate Sessions
 
 Add a manual outcome annotation:
 
@@ -123,7 +126,7 @@ Add a manual outcome annotation:
 cet annotate --session <session-id> --outcome shipped --score 1 --note "Merged with tests passing"
 ```
 
-### 6. Generate a Report
+### 7. Generate a Report
 
 Generate an effectiveness report:
 
@@ -131,7 +134,7 @@ Generate an effectiveness report:
 cet report
 ```
 
-### 7. Start the Dashboard
+### 8. Start the Dashboard
 
 Start the local dashboard and API server:
 
@@ -143,7 +146,7 @@ cet serve
 
 | Command | Purpose |
 | --- | --- |
-| `cet setup [--no-serve] [--interactive] [--port <port>]` | One-command onboarding: initialize, discover, import, sync, and start the dashboard. |
+| `cet setup [--no-serve] [--interactive]` | One-command onboarding: init, discover AI tools, import sessions, sync git, start dashboard. |
 | `cet init [--data-dir <path>] [--force]` | Initialize the local tracker workspace and database. |
 | `cet import [--tool <id>] [--source <path>] [--fixture <path>] [--discover] [--dry-run] [--verbose]` | Import AI coding sessions from Codex, OpenCode, Claude Code, Cursor, or Factory Droid. |
 | `cet sync --repo <path> [--project <id>]` | Read local Git commits and correlate them with imported sessions. |
@@ -152,7 +155,7 @@ cet serve
 | `cet report [--json] [--tool <id>] [--project <id>] [--from <date>] [--to <date>]` | Generate an effectiveness report from imported data. |
 | `cet serve [--port <port>]` | Start the local dashboard and API server on `127.0.0.1`; default port is `43187`. |
 | `cet export --output <path> [--format json\|markdown] [--overwrite] [--tool <id>] [--project <id>] [--from <date>] [--to <date>]` | Export an effectiveness report to a local file. |
-| `cet watch [--interval <minutes>] [--stop] [--status]` | Start, stop, or check status of the background daemon. |
+| `cet watch [--interval <min>] [--stop] [--status]` | Background daemon that polls for new AI sessions and git changes. Start, stop, or check status. |
 
 Most commands also accept `--data-dir <path>` to use a custom tracker data directory.
 
@@ -206,7 +209,7 @@ Comprehensive documentation is available in the [docs/](docs/) folder:
 
 - [Architecture](docs/architecture.md) — System components, data flow, and key patterns
 - [Development Guide](docs/development.md) — Setup, build/test, project structure, cross-platform notes
-- [CLI Reference](docs/cli-reference.md) — All 8 CLI commands with options and examples
+- [CLI Reference](docs/cli-reference.md) — All CLI commands with options and examples
 - [API Reference](docs/api-reference.md) — All 10 API endpoints with query parameters and response shapes
 - [Data Model](docs/data-model.md) — Database tables, columns, indexes, and relationships
 - [Importer Guide](docs/importer-guide.md) — ToolImporter interface, registration, and privacy redaction

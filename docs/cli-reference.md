@@ -17,7 +17,7 @@ cet <command> [options]
 
 ### `cet setup`
 
-One-command onboarding: initialize workspace, discover AI tools, sync git, and start the dashboard.
+One-command onboarding: init, discover AI tools, import sessions, sync git, start dashboard.
 
 ```
 cet setup [options]
@@ -73,6 +73,60 @@ cet setup --data-dir ~/my-tracker-data
 
 ---
 
+### `cet watch`
+
+Background daemon that polls for new AI sessions and git changes. Start, stop, or check status.
+
+```
+cet watch [options]
+```
+
+**Options:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `-d, --data-dir <path>` | string | — | Custom data directory path |
+| `--stop` | boolean | false | Stop the running daemon |
+| `--status` | boolean | false | Check daemon status |
+| `--interval <min>` | number | 10 | Polling interval in minutes (minimum: 1) |
+
+**Daemon behavior (start mode):**
+- Forks a background Node.js process that polls every N minutes
+- Stores PID in `<dataDir>/watch.pid` for lifecycle management
+- Each poll cycle: auto-init check, discover/import new AI sessions, sync git commits
+- Logs activity to `<dataDir>/watch.log` with timestamps
+- Graceful shutdown on SIGTERM/SIGINT: cleans PID file, logs shutdown
+
+**Stop behavior (`--stop`):**
+- Reads PID from `<dataDir>/watch.pid`, sends termination signal
+- Waits for clean exit, removes PID file
+- If no PID file: prints "Daemon not running" and exits 0
+- If stale PID (process dead): cleans up and prints message
+
+**Status behavior (`--status`):**
+- PID file exists + process alive: prints "Daemon running (PID: <pid>)"
+- PID file exists + process dead: cleans up and prints "Daemon not running (stale PID cleaned)"
+- No PID file: prints "Daemon not running"
+
+**Examples:**
+```bash
+# Start daemon with default 10-minute interval
+cet watch
+
+# Start daemon with 5-minute polling
+cet watch --interval 5
+
+# Check daemon status
+cet watch --status
+
+# Stop daemon
+cet watch --stop
+
+# Custom data directory
+cet watch --data-dir ~/my-tracker-data --interval 15
+```
+
+---
 
 ### `cet init`
 
@@ -438,56 +492,3 @@ cet export --format markdown --output report.md --overwrite
 cet export --format json --output codex-report.json --tool codex --from 2025-01-01
 ```
 ---
-
-### `cet watch`
-
-Start, stop, or check the status of a background daemon that keeps tracker data fresh.
-
-```
-cet watch [options]
-```
-
-**Options:**
-
-| Flag | Type | Default | Description |
-|------|------|---------|-------------|
-| `-d, --data-dir <path>` | string | — | Custom data directory path |
-| `--stop` | boolean | false | Stop the running daemon |
-| `--status` | boolean | false | Check daemon status |
-| `--interval <minutes>` | number | 10 | Polling interval in minutes (minimum: 1) |
-
-**Daemon behavior (start mode):**
-- Forks a background Node.js process that polls every N minutes
-- Stores PID in `<dataDir>/watch.pid` for lifecycle management
-- Each poll cycle: auto-init check, discover/import new AI sessions, sync git commits
-- Logs activity to `<dataDir>/watch.log` with timestamps
-- Graceful shutdown on SIGTERM/SIGINT: cleans PID file, logs shutdown
-
-**Stop behavior (`--stop`):**
-- Reads PID from `<dataDir>/watch.pid`, sends termination signal
-- Waits for clean exit, removes PID file
-- If no PID file: prints "Daemon not running" and exits 0
-- If stale PID (process dead): cleans up and prints message
-
-**Status behavior (`--status`):**
-- PID file exists + process alive: prints "Daemon running (PID: <pid>)"
-- PID file exists + process dead: cleans up and prints "Daemon not running (stale PID cleaned)"
-- No PID file: prints "Daemon not running"
-
-**Examples:**
-```bash
-# Start daemon with default 10-minute interval
-cet watch
-
-# Start daemon with 5-minute polling
-cet watch --interval 5
-
-# Check daemon status
-cet watch --status
-
-# Stop daemon
-cet watch --stop
-
-# Custom data directory
-cet watch --data-dir ~/my-tracker-data --interval 15
-```
