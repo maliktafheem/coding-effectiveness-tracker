@@ -20,4 +20,4 @@ This directory contains the reference documentation for the Coding Effectiveness
 - **Default data directory**: `%LOCALAPPDATA%\coding-effectiveness-tracker` (Windows) / `~/.coding-effectiveness-tracker` (macOS/Linux)
 - **Default dashboard port**: `43187` (loopback only)
 - **License**: MIT
-- **Minimum Node**: 18+
+- **Minimum Node**: 20+

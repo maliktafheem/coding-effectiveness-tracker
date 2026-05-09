@@ -185,7 +185,7 @@ The API server refuses to bind to any non-loopback address. Default host is `127
 
 | Layer | Technology |
 |-------|-----------|
-| Runtime | Node.js >= 18 |
+| Runtime | Node.js >= 20 |
 | Language | TypeScript (strict mode) |
 | CLI Framework | commander |
 | Database | better-sqlite3 (SQLite, WAL mode) |

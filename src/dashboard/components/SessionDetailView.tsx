@@ -56,6 +56,11 @@ export default function SessionDetailView({ sessionId, onBack }: { sessionId: st
         <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' }}>
           <div><strong>Tool:</strong> <span className="tag">{data.sourceToolId}</span></div>
           {data.projectId && <div><strong>Project:</strong> <span className="tag">{data.projectId}</span></div>}
+          {data.externalId && (
+            <div title="External session identifier from the source tool">
+              <strong>External ID:</strong> <code style={{ fontSize: '0.85em', color: 'var(--text-muted, #94a3b8)' }}>{data.externalId}</code>
+            </div>
+          )}
           <div><strong>Model:</strong> {data.model || 'N/A'}</div>
           <div><strong>Started:</strong> {data.startedAt ? new Date(data.startedAt).toLocaleString() : 'N/A'}</div>
           <div><strong>Duration:</strong> {data.durationMs ? Math.round(data.durationMs / 60000) + ' min' : 'N/A'}</div>

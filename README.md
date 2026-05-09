@@ -3,7 +3,7 @@
 <p align="center">
   <a href="https://www.npmjs.com/package/coding-effectiveness-tracker"><img src="https://img.shields.io/npm/v/coding-effectiveness-tracker" alt="npm version"></a>
   <a href="LICENSE"><img src="https://img.shields.io/npm/l/coding-effectiveness-tracker" alt="MIT License"></a>
-  <a href="package.json"><img src="https://img.shields.io/badge/node-%3E%3D18-brightgreen" alt="Node >=18"></a>
+  <a href="package.json"><img src="https://img.shields.io/badge/node-%3E%3D20-brightgreen" alt="Node >=20"></a>
   <a href="https://github.com/TafheemMalik/coding-effectiveness-tracker/actions"><img src="https://img.shields.io/github/actions/workflow/status/TafheemMalik/coding-effectiveness-tracker/ci.yml" alt="CI Status"></a>
 </p>
 
@@ -38,13 +38,14 @@ Coding Effectiveness Tracker stores data on your machine and runs the dashboard/
 
 ## Prerequisites
 
-- Node.js 18 or newer
+- Node.js 20 or newer (Node 18 reached end-of-life April 2025)
 - npm
 - Git, if you want to sync commit history from local repositories
 
 ## Install, Build, and Test
 
 > **Note:** This package is not yet published on npm. Install from the local repository.
+> The CI status badge above renders "no status" until the repository is pushed to GitHub and the `ci.yml` workflow has run at least once on the default branch.
 
 ```powershell
 npm install

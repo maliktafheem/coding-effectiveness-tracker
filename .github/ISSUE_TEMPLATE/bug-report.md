@@ -29,7 +29,7 @@ What actually happened, including any error messages, stack traces, or unexpecte
 ## System Information
 
 - **OS**: [e.g., Windows 11, macOS 14, Ubuntu 22.04]
-- **Node.js version**: [e.g., 18.20.0]
+- **Node.js version**: [e.g., 20.18.0]
 - **npm version**: [e.g., 10.8.0]
 - **Package version**: [e.g., 0.1.0, or provide commit hash]
 - **Installation method**: [e.g., npm global install, git clone, npx]

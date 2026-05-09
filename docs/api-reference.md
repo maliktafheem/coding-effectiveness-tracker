@@ -20,6 +20,8 @@ The following optional parameters can be appended to most GET endpoints for filt
 
 Date-only values (e.g., `from=2025-01-01`) are expanded to `T00:00:00Z` / `T23:59:59Z`.
 
+All error responses use the shape `{ "error": string }`.
+
 ---
 
 ## `GET /health`
@@ -33,6 +35,32 @@ Health check endpoint. Returns server status and timestamp.
   "timestamp": "2025-01-15T10:30:00.000Z"
 }
 ```
+
+---
+
+## `GET /api/available-tools`
+
+Get all registered source tools with their session counts. Used to populate tool filter dropdowns.
+
+**Response:**
+```json
+{
+  "tools": [
+    {
+      "id": "claude-code",
+      "name": "Claude Code",
+      "sessionCount": 30
+    },
+    {
+      "id": "codex",
+      "name": "Codex",
+      "sessionCount": 17
+    }
+  ]
+}
+```
+
+**Returns empty array** (`{ "tools": [] }`) if workspace is not initialized.
 
 ---
 
@@ -178,6 +206,37 @@ Get project-level breakdown with session counts.
 ```
 
 **Returns empty array** if workspace is not initialized.
+
+---
+
+## `GET /api/trends`
+
+Get weekly trend data for sessions, test results, and effectiveness scores.
+
+**Query parameters:** `project`
+
+**Response:**
+```json
+{
+  "points": [
+    {
+      "weekStart": "2025-01-06T00:00:00.000Z",
+      "weekEnd": "2025-01-12T23:59:59.000Z",
+      "sessionCount": 12,
+      "sessionsWithGit": 8,
+      "totalTestsPassed": 45,
+      "totalTestsFailed": 3,
+      "scoreAggregate": 0.74
+    }
+  ],
+  "period": {
+    "from": "2025-01-06T00:00:00.000Z",
+    "to": "2025-03-15T23:59:59.000Z"
+  }
+}
+```
+
+**Returns empty points array** (`{ "points": [], "period": { "from": null, "to": null } }`) if workspace is not initialized.
 
 ---
 

@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- **Node.js** >= 18
+- **Node.js** >= 20
 - **npm** (ships with Node.js)
 - **Git** (for `cet sync` command and version control)
 

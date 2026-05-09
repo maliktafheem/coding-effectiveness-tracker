@@ -65,7 +65,9 @@ reworkRatio = sessionsWithRework / totalSessions
 reworkScore = 1 - reworkRatio
 ```
 
-**Available when:** at least one session has metadata.
+The dimension is computed via a single SQLite aggregate (`json_extract` on `metadata_json.reworkCount`). Sessions whose `metadata_json` fails `json_valid` are counted separately and surfaced in the explanation.
+
+**Available when:** at least one session's metadata parses and yields a rework signal (even zero). If every session with metadata fails to parse, the dimension is marked **unavailable** with explanation "rework signal unavailable" rather than silently scoring 1.0.
 
 ---
 
@@ -156,4 +158,5 @@ The report output shows each dimension's **current weight** and explanation.
 - The scoring model correlates data points that are **temporally related**, not causally linked. A high score does not guarantee AI effectiveness — it reflects the measurable signals available.
 - Sessions without project assignments have broader correlation windows (not filtered by project), which may inflate git and test correlation scores.
 - Missing token/cost data from some AI tools means the cost-efficiency dimension may be unavailable for those tools.
-- The rework indicator only captures metadata-based retry counts. If a tool does not expose rework metadata, the dimension reports "no rework detected" rather than "unknown."
+- The rework indicator only captures metadata-based retry counts. If a tool does not expose rework metadata, the dimension reports "no rework detected" rather than "unknown." If every session's metadata is malformed, the dimension is reported as unavailable instead of scoring 1.0.
+- Correlation and rework queries use SQLite's `json_each` and `json_extract` to aggregate over filtered session sets in a single pass — no per-session loops.
