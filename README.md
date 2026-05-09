@@ -214,5 +214,6 @@ Comprehensive documentation is available in the [docs/](docs/) folder:
 - [CLI Reference](docs/cli-reference.md) — All CLI commands with options and examples
 - [API Reference](docs/api-reference.md) — All 10 API endpoints with query parameters and response shapes
 - [Data Model](docs/data-model.md) — Database tables, columns, indexes, and relationships
+- [Scoring Model](docs/scoring.md) — Effectiveness dimensions, weights, and configuration
 - [Importer Guide](docs/importer-guide.md) — ToolImporter interface, registration, and privacy redaction
 - [Privacy](docs/privacy.md) — Local-first architecture, telemetry, and redaction pipeline

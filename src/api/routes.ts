@@ -3,6 +3,7 @@ import type { ServerOptions } from './server.js';
 import { resolveDataDir, isInitialized } from '../config.js';
 import { Storage } from '../storage.js';
 import { computeEffectivenessScore } from '../scoring/effectiveness.js';
+import { loadScoringConfig } from '../scoring/config.js';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { generateJsonExport, generateMarkdownExport } from './export.js';
@@ -115,9 +116,11 @@ export function registerRoutes(app: FastifyInstance, opts: ServerOptions): void 
         };
       }
       const tools = [...new Set(sessions.map(s => s.source_tool_id as string))];
+      const scoreConfig = loadScoringConfig(opts.dataDir);
       const score = computeEffectivenessScore(storage, {
         toolId: filters.tool, projectId: filters.project,
         from: filters.from, to: filters.to,
+        weights: scoreConfig.weights,
       });
       let ocSql = 'SELECT count(*) as cnt FROM outcomes o JOIN sessions s ON o.session_id = s.id WHERE 1=1';
       const ocParams: (string|number)[] = [];
