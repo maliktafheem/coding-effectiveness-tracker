@@ -495,3 +495,93 @@ cet export --format markdown --output report.md --overwrite
 cet export --format json --output codex-report.json --tool codex --from 2025-01-01
 ```
 ---
+
+
+---
+
+### `cet test`
+
+Run a user command and capture pass/fail outcome and exit code.
+
+```
+cet test -- <command>
+```
+
+**Behavior:**
+- Runs the specified command with all arguments after `--`
+- Captures the exit code: 0 = passing, non-zero = failing
+- Stores the outcome in the database correlated with recent sessions
+- Preserves and exits with the wrapped command's exit code
+
+**Examples:**
+```bash
+# npm test (Windows or macOS/Linux — same syntax)
+cet test -- npm test
+
+# pytest with arguments
+cet test -- pytest tests/ -v
+
+# Any command that exits 0 on success
+cet test -- node -e "process.exit(0)"
+
+# Capture failure
+cet test -- node -e "process.exit(1)"
+```
+
+---
+
+### `cet compare`
+
+Compare sessions, tools, or time periods.
+
+```
+cet compare [options]
+```
+
+**Options:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `-d, --data-dir <path>` | string | — | Custom data directory path |
+| `--tool <id>` | string | — | Filter by source tool |
+| `-p, --project <id>` | string | — | Filter by project |
+| `--from <date>` | string | — | Start date filter (ISO date) |
+| `--to <date>` | string | — | End date filter (ISO date) |
+
+**Examples:**
+```bash
+# Compare two tools
+cet compare --tool claude-code vs codex
+
+# Compare two time periods
+cet compare --from 2025-01-01 --to 2025-01-31 vs 2025-02-01 --to 2025-02-28
+
+# Compare specific period
+cet compare --tool claude-code --from 2025-01-01 --to 2025-03-31
+```
+
+---
+
+### `cet trends`
+
+Show weekly trend analytics with rolling averages.
+
+```
+cet trends [options]
+```
+
+**Options:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `-d, --data-dir <path>` | string | — | Custom data directory path |
+| `-p, --project <id>` | string | — | Filter by project |
+
+**Examples:**
+```bash
+# Weekly trends for all projects
+cet trends
+
+# Weekly trends for a specific project
+cet trends --project my-app
+```

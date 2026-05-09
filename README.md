@@ -63,6 +63,8 @@ After building or installing globally, the CLI command is `cet`.
 
 ## Quick Start
 
+> **Cross-platform:** Examples show PowerShell (Windows). For macOS/Linux, replace `%LOCALAPPDATA%` with `~/.coding-effectiveness-tracker` and Windows paths with POSIX equivalents.
+
 ### 1. One-Command Setup (Recommended)
 
 The fastest way to get started:
@@ -128,7 +130,30 @@ Add a manual outcome annotation:
 cet annotate --session <session-id> --outcome shipped --score 1 --note "Merged with tests passing"
 ```
 
-### 7. Generate a Report
+### 7. Track Test Outcomes
+
+Run a test command and capture the result:
+
+```powershell
+cet test -- npm test
+cet test -- pytest tests/
+```
+```bash
+# macOS / Linux
+cet test -- pytest tests/
+cet test -- npm test
+```
+
+### 8. Compare Tools, Sessions, or Periods
+
+Compare effectiveness across different dimensions:
+
+```powershell
+cet compare --tool claude-code vs codex
+cet compare --from 2025-01-01 --to 2025-01-31 vs 2025-02-01 --to 2025-02-28
+```
+
+### 9. Generate a Report
 
 Generate an effectiveness report:
 
@@ -136,7 +161,7 @@ Generate an effectiveness report:
 cet report
 ```
 
-### 8. Start the Dashboard
+### 10. Start the Dashboard
 
 Start the local dashboard and API server:
 
@@ -152,7 +177,10 @@ cet serve
 | `cet init [--data-dir <path>] [--force]` | Initialize the local tracker workspace and database. |
 | `cet import [--tool <id>] [--source <path>] [--fixture <path>] [--discover] [--dry-run] [--verbose]` | Import AI coding sessions from Codex, OpenCode, Claude Code, Cursor, or Factory Droid. |
 | `cet sync --repo <path> [--project <id>]` | Read local Git commits and correlate them with imported sessions. |
+| `cet test -- <command>` | Run a user command and capture pass/fail outcome and exit code. |
 | `cet test-outcome [--outcome-json <path>] [--command <str>] [--passed <n>] [--failed <n>] [--skipped <n>] [--duration <ms>]` | Ingest local test result artifacts or command outcome records. |
+| `cet compare [--tool <id>] [--from <date>] [--to <date>] vs [--tool <id>] [--from <date>] [--to <date>]` | Compare sessions, tools, or time periods. |
+| `cet trends [--project <id>]` | Show weekly trend analytics with rolling averages. |
 | `cet annotate --session <id> [--outcome <label>] [--score <number>] [--note <text>] [--tags <tags>]` | Record a manual outcome annotation for a session. |
 | `cet report [--json] [--tool <id>] [--project <id>] [--from <date>] [--to <date>]` | Generate an effectiveness report from imported data. |
 | `cet serve [--port <port>]` | Start the local dashboard and API server on `127.0.0.1`; default port is `43187`. |
@@ -172,6 +200,8 @@ Run `cet serve` and open the printed local address to view the dashboard. The lo
 - `GET /api/timeline`
 - `GET /api/tools`
 - `GET /api/projects`
+- `GET /api/trends`
+- `GET /api/available-tools`
 - `GET /api/sessions/:id`
 - `POST /api/sessions/:id/annotations`
 - `PATCH /api/annotations/:id`

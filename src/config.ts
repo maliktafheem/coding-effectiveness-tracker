@@ -71,11 +71,11 @@ export function ensureInitialized(dataDir: string): void {
     const db = storage.db;
 
     const defaultTools = [
-      { id: "codex", name: "codex", display_name: "Codex" },
-      { id: "opencode", name: "opencode", display_name: "OpenCode" },
-      { id: "factory-droid", name: "factory-droid", display_name: "Factory Droid" },
       { id: "claude-code", name: "claude-code", display_name: "Claude Code" },
+      { id: "opencode", name: "opencode", display_name: "OpenCode" },
+      { id: "codex", name: "codex", display_name: "Codex" },
       { id: "cursor", name: "cursor", display_name: "Cursor" },
+      { id: "factory-droid", name: "factory-droid", display_name: "Factory Droid" },
     ];
 
     const insertTool = db.prepare(

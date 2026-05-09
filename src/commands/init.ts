@@ -74,11 +74,11 @@ export async function handleInit(opts: InitOptions): Promise<void> {
   try {
     // Insert default tool records if not present
     const defaultTools = [
-      { id: "codex", name: "codex", display_name: "Codex" },
-      { id: "opencode", name: "opencode", display_name: "OpenCode" },
-      { id: "factory-droid", name: "factory-droid", display_name: "Factory Droid" },
       { id: "claude-code", name: "claude-code", display_name: "Claude Code" },
+      { id: "opencode", name: "opencode", display_name: "OpenCode" },
+      { id: "codex", name: "codex", display_name: "Codex" },
       { id: "cursor", name: "cursor", display_name: "Cursor" },
+      { id: "factory-droid", name: "factory-droid", display_name: "Factory Droid" },
     ];
 
     const db = storage.db;
@@ -95,7 +95,7 @@ export async function handleInit(opts: InitOptions): Promise<void> {
 
     console.log("Initialized workspace at: " + dataDir);
     console.log("Database: " + storage.dbPath);
-    console.log("Registered AI tools: Codex, OpenCode, Factory Droid, Claude Code, Cursor");
+    console.log("Registered AI tools: Claude Code, OpenCode, Codex, Cursor, Factory Droid");
     console.log("Privacy: All data stays local. No telemetry or external services.");
   } catch (err) {
     if (err instanceof StorageError) {
