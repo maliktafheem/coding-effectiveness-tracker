@@ -55,8 +55,9 @@ All data stays on the user's machine. There is no cloud backend, no telemetry, a
        ▼
 ┌────────────────────────────────────────────────────────────┐
 │               API Server (Fastify · loopback only)          │
-│  10 endpoints: /health, /api/overview, /api/timeline,       │
-│  /api/tools, /api/projects, /api/sessions/:id,              │
+│  12 endpoints: /health, /api/available-tools, /api/trends,  │
+│  /api/overview, /api/timeline, /api/tools, /api/projects,   │
+│  /api/sessions/:id,                                         │
 │  POST /api/sessions/:id/annotations,                        │
 │  PATCH /api/annotations/:id,                                │
 │  /api/export/json, /api/export/markdown                     │
