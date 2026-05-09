@@ -66,7 +66,7 @@ coding-effectiveness-tracker/
 │   ├── collectors/         # Data collectors (git, test)
 │   ├── correlation/        # Session correlation engine
 │   ├── scoring/            # Effectiveness scoring
-│   ├── storage/            # SQLite database layer
+│   ├── storage.ts          # SQLite database layer
 │   ├── api/                # Fastify API server
 │   └── dashboard/          # Vite/React dashboard
 ├── tests/                  # Test suites

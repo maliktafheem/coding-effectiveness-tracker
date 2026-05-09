@@ -70,7 +70,6 @@ describe('Storage', () => {
       expect(tableNames).toContain('sessions');
       expect(tableNames).toContain('events');
       expect(tableNames).toContain('git_commits');
-      expect(tableNames).toContain('session_commits');
       expect(tableNames).toContain('test_outcomes');
       expect(tableNames).toContain('outcomes');
       expect(tableNames).toContain('correlations');

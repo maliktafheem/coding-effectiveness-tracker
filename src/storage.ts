@@ -1,6 +1,6 @@
 import Database from 'better-sqlite3';
 import { join } from 'node:path';
-import { existsSync, readdirSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 
 export interface StorageOptions {
   dataDir: string;
@@ -228,16 +228,6 @@ function getMigrations(): Migration[] {
         CREATE INDEX IF NOT EXISTS idx_git_commits_hash ON git_commits(hash);
         CREATE INDEX IF NOT EXISTS idx_git_commits_project ON git_commits(project_id);
 
-        CREATE TABLE IF NOT EXISTS session_commits (
-          session_id TEXT NOT NULL,
-          commit_id TEXT NOT NULL,
-          confidence REAL NOT NULL DEFAULT 0.0,
-          created_at TEXT NOT NULL DEFAULT (datetime('now')),
-          PRIMARY KEY (session_id, commit_id),
-          FOREIGN KEY (session_id) REFERENCES sessions(id),
-          FOREIGN KEY (commit_id) REFERENCES git_commits(id)
-        );
-
         CREATE TABLE IF NOT EXISTS test_outcomes (
           id TEXT PRIMARY KEY,
           project_id TEXT,
@@ -291,12 +281,4 @@ function getMigrations(): Migration[] {
       `,
     },
   ];
-}
-
-/** Find all migration SQL files in the migrations directory. */
-export function findMigrationFiles(dir: string): string[] {
-  if (!existsSync(dir)) return [];
-  return readdirSync(dir)
-    .filter((f) => f.endsWith('.sql'))
-    .sort();
 }
