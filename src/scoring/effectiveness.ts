@@ -13,6 +13,50 @@ import type { Storage } from '../storage.js';
 import type { ScoringWeights, ScoringThresholds } from './config.js';
 import { DEFAULT_WEIGHTS, DEFAULT_THRESHOLDS } from './config.js';
 
+/**
+ * Load correlation counts for a set of sessions in a single aggregate query.
+ *
+ * Uses SQLite's json_each() to pass session IDs as a JSON array, avoiding
+ * the SQLite 999-parameter IN limit and eliminating N+1 per-session queries.
+ *
+ * Returns Map<sessionId, Map<correlationType, count>>.
+ */
+function loadCorrelationCounts(
+  db: Database.Database,
+  sessionIds: string[],
+  types: string[],
+): Map<string, Map<string, number>> {
+  const result = new Map<string, Map<string, number>>();
+  if (sessionIds.length === 0 || types.length === 0) return result;
+
+  // Pre-populate so callers can rely on every sessionId being present
+  for (const sid of sessionIds) {
+    const inner = new Map<string, number>();
+    for (const t of types) inner.set(t, 0);
+    result.set(sid, inner);
+  }
+
+  const typePlaceholders = types.map(() => '?').join(', ');
+  const sql =
+    `SELECT session_id, correlation_type, count(*) as cnt ` +
+    `FROM correlations ` +
+    `WHERE session_id IN (SELECT value FROM json_each(?)) ` +
+    `AND correlation_type IN (${typePlaceholders}) ` +
+    `GROUP BY session_id, correlation_type`;
+
+  const rows = db.prepare(sql).all(
+    JSON.stringify(sessionIds),
+    ...types,
+  ) as { session_id: string; correlation_type: string; cnt: number }[];
+
+  for (const row of rows) {
+    const inner = result.get(row.session_id);
+    if (inner) inner.set(row.correlation_type, row.cnt);
+  }
+
+  return result;
+}
+
 export interface ScoreDimension {
   name: string;
   value: number; // 0..1
@@ -97,15 +141,19 @@ export function computeEffectivenessScore(
     available: sessionCount > 0,
   });
 
+  // ─── Pre-load correlation counts (single aggregate query, eliminates N+1) ──
+  const sessionIds = sessions.map(s => s.id as string);
+  const corrCounts = loadCorrelationCounts(db, sessionIds, ['git-commit', 'test-outcome']);
+
   // ─── Dimension 2: Git Correlation ──────────────────────────────────────
-  const gitDim = computeGitDimension(db, sessions, weights);
+  const gitDim = computeGitDimension(sessions, corrCounts, weights);
   dimensions.push(gitDim);
   if (!gitDim.available) {
     missingInputs.push('Git correlation data not available - no matching commits found for sessions.');
   }
 
   // ─── Dimension 3: Test Confidence ──────────────────────────────────────
-  const testDim = computeTestDimension(db, sessions, options, weights);
+  const testDim = computeTestDimension(db, sessions, corrCounts, options, weights);
   dimensions.push(testDim);
   if (!testDim.available) {
     missingInputs.push('Test outcome data not available - no test results linked to sessions.');
@@ -152,8 +200,8 @@ export function computeEffectivenessScore(
 }
 
 function computeGitDimension(
-  db: Database.Database,
   sessions: Record<string, unknown>[],
+  corrCounts: Map<string, Map<string, number>>,
   weights: ScoringWeights,
 ): ScoreDimension {
   if (sessions.length === 0) {
@@ -162,10 +210,8 @@ function computeGitDimension(
 
   let correlatedCount = 0;
   for (const s of sessions) {
-    const corr = db.prepare(
-      "SELECT count(*) as cnt FROM correlations WHERE session_id = ? AND correlation_type = 'git-commit'",
-    ).get(s.id) as { cnt: number };
-    if (corr.cnt > 0) correlatedCount++;
+    const cnt = corrCounts.get(s.id as string)?.get('git-commit') ?? 0;
+    if (cnt > 0) correlatedCount++;
   }
 
   const ratio = correlatedCount / sessions.length;
@@ -184,6 +230,7 @@ function computeGitDimension(
 function computeTestDimension(
   db: Database.Database,
   sessions: Record<string, unknown>[],
+  corrCounts: Map<string, Map<string, number>>,
   options: ScoreOptions,
   weights: ScoringWeights,
 ): ScoreDimension {
@@ -258,10 +305,8 @@ function computeTestDimension(
 
   let correlatedWithTests = 0;
   for (const s of sessions) {
-    const corr = db.prepare(
-      "SELECT count(*) as cnt FROM correlations WHERE session_id = ? AND correlation_type = 'test-outcome'",
-    ).get(s.id) as { cnt: number };
-    if (corr.cnt > 0) correlatedWithTests++;
+    const cnt = corrCounts.get(s.id as string)?.get('test-outcome') ?? 0;
+    if (cnt > 0) correlatedWithTests++;
   }
   const correlationRatio = sessions.length > 0 ? correlatedWithTests / sessions.length : 0;
 

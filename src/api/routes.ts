@@ -177,9 +177,30 @@ export function registerRoutes(app: FastifyInstance, opts: ServerOptions): void 
       sql += ' ORDER BY started_at';
       const rows = db.prepare(sql).all(...params) as Record<string, unknown>[];
 
+      // Load all correlation counts and outcomes in bulk (eliminates N+1)
+      const rowIds = rows.map(r => r.id as string);
+      const corrCountMap = new Map<string, number>();
+      const outcomesMap = new Map<string, { label: string; score: number | null }[]>();
+      if (rowIds.length > 0) {
+        const idsJson = JSON.stringify(rowIds);
+        const corrRows = db.prepare(
+          'SELECT session_id, count(*) as cnt FROM correlations WHERE session_id IN (SELECT value FROM json_each(?)) GROUP BY session_id'
+        ).all(idsJson) as { session_id: string; cnt: number }[];
+        for (const cr of corrRows) corrCountMap.set(cr.session_id, cr.cnt);
+
+        const outcomeRows = db.prepare(
+          'SELECT session_id, label, score FROM outcomes WHERE session_id IN (SELECT value FROM json_each(?))'
+        ).all(idsJson) as { session_id: string; label: string; score: number | null }[];
+        for (const or of outcomeRows) {
+          const list = outcomesMap.get(or.session_id) ?? [];
+          list.push({ label: or.label, score: or.score });
+          outcomesMap.set(or.session_id, list);
+        }
+      }
+
       const sessions = rows.map(s => {
-        const corrCount = (db.prepare('SELECT count(*) as cnt FROM correlations WHERE session_id = ?').get(s.id) as { cnt: number }).cnt;
-        const outcomes = (db.prepare('SELECT label, score FROM outcomes WHERE session_id = ?').all(s.id) as { label: string; score: number | null }[]);
+        const corrCount = corrCountMap.get(s.id as string) ?? 0;
+        const outcomes = outcomesMap.get(s.id as string) ?? [];
         const outcomeLabels = outcomes.map(o => o.label);
         const hasOutcome = outcomes.length > 0;
         let reworkCount = 0;
