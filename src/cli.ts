@@ -83,6 +83,13 @@ program
   .action(handleSync);
 
 program
+  .command('test')
+  .description('Run a command and record the test outcome for effectiveness tracking')
+  .option('-d, --data-dir <path>', 'Custom data directory path')
+  .option('-p, --project <id>', 'Project ID (defaults to derived from cwd)')
+  .allowUnknownOption()
+
+program
   .command('test-outcome')
   .description('Ingest local test result artifacts or command outcome records and correlate with sessions (local-only)')
   .option('-d, --data-dir <path>', 'Custom data directory path')
@@ -166,6 +173,46 @@ if (process.argv[1]?.endsWith('cli.ts') || process.argv[1]?.endsWith('cli.js')) 
     process.exit(0);
   }
 
-  program.parse(process.argv);
+  // Intercept `cet test -- <command>` before Commander parse
+  // Commander's -- passthrough doesn't handle subcommand args well
+  if (cliArgs[0] === 'test') {
+    const sepIndex = cliArgs.indexOf('--');
+    const cmdArgs: string[] = [];
+    if (sepIndex >= 0) {
+      cmdArgs.push(...cliArgs.slice(sepIndex + 1));
+    }
+    // Handle -- help and options before --
+    const preSep = sepIndex >= 0 ? cliArgs.slice(1, sepIndex) : cliArgs.slice(1);
+    const dataDirIdx = preSep.indexOf('-d');
+    const dataDirLongIdx = preSep.indexOf('--data-dir');
+    const projectIdx = preSep.indexOf('-p');
+    const projectLongIdx = preSep.indexOf('--project');
+    const dataDir = dataDirIdx >= 0 ? preSep[dataDirIdx + 1] : (dataDirLongIdx >= 0 ? preSep[dataDirLongIdx + 1] : undefined);
+    const project = projectIdx >= 0 ? preSep[projectIdx + 1] : (projectLongIdx >= 0 ? preSep[projectLongIdx + 1] : undefined);
+
+    if (preSep.includes('--help') || preSep.includes('-h')) {
+      // Show test help
+      console.log('Usage: cet test [options] -- <command>');
+      console.log('');
+      console.log('Run a command and record the test outcome for effectiveness tracking.');
+      console.log('The command output is streamed to the terminal and the exit code is recorded.');
+      console.log('');
+      console.log('Options:');
+      console.log('  -d, --data-dir <path>  Custom data directory path');
+      console.log('  -p, --project <id>     Project ID (defaults to derived from cwd)');
+      console.log('');
+      console.log('Examples:');
+      console.log('  cet test -- npm test');
+      console.log('  cet test -- pytest tests/');
+      console.log('  cet test -- node -e "process.exit(0)"');
+      process.exit(0);
+    }
+
+    import('./commands/test.js').then(({ handleTest }) =>
+      handleTest({ dataDir, project, args: cmdArgs })
+    );
+  } else {
+    program.parse(process.argv);
+  }
 }
 
