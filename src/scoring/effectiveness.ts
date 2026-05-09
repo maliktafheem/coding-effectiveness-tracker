@@ -10,8 +10,8 @@
 
 import type Database from 'better-sqlite3';
 import type { Storage } from '../storage.js';
-import type { ScoringWeights } from './config.js';
-import { DEFAULT_WEIGHTS } from './config.js';
+import type { ScoringWeights, ScoringThresholds } from './config.js';
+import { DEFAULT_WEIGHTS, DEFAULT_THRESHOLDS } from './config.js';
 
 export interface ScoreDimension {
   name: string;
@@ -36,6 +36,8 @@ export interface ScoreOptions {
   to?: string;
   /** Custom scoring weights (defaults to DEFAULT_WEIGHTS). */
   weights?: Partial<ScoringWeights>;
+  /** Custom scoring thresholds (defaults to DEFAULT_THRESHOLDS). */
+  thresholds?: Partial<ScoringThresholds>;
 }
 
 /**
@@ -49,6 +51,7 @@ export function computeEffectivenessScore(
 ): EffectivenessScore {
   const db = storage.db;
   const weights: ScoringWeights = { ...DEFAULT_WEIGHTS, ...options.weights };
+  const thresholds: ScoringThresholds = { ...DEFAULT_THRESHOLDS, ...options.thresholds };
 
   // Build session query with filters
   let sessionQuery = 'SELECT * FROM sessions WHERE 1=1';
@@ -85,7 +88,7 @@ export function computeEffectivenessScore(
   const missingInputs: string[] = [];
 
   // ─── Dimension 1: Activity/Output ──────────────────────────────────────
-  const activityScore = Math.min(sessionCount / 10, 1);
+  const activityScore = Math.min(sessionCount / thresholds.activitySessionCap, 1);
   dimensions.push({
     name: 'activity-output',
     value: activityScore,
@@ -116,7 +119,7 @@ export function computeEffectivenessScore(
   }
 
   // ─── Dimension 5: Cost Efficiency ──────────────────────────────────────
-  const costDim = computeCostDimension(sessions, weights);
+  const costDim = computeCostDimension(sessions, weights, thresholds);
   dimensions.push(costDim);
   if (!costDim.available) {
     missingInputs.push('Cost/token data not available for some or all sessions - shown as unknown, not zero.');
@@ -313,6 +316,7 @@ function computeManualOutcomeDimension(
 function computeCostDimension(
   sessions: Record<string, unknown>[],
   weights: ScoringWeights,
+  thresholds: ScoringThresholds,
 ): ScoreDimension {
   let sessionsWithCost = 0;
   let totalCost = 0;
@@ -339,7 +343,7 @@ function computeCostDimension(
   }
 
   const avgCost = totalCost / sessionsWithCost;
-  const costScore = Math.max(0, Math.min(1, 1 - (avgCost / 1.0)));
+  const costScore = Math.max(0, Math.min(1, 1 - (avgCost / thresholds.costCeiling)));
 
   return {
     name: 'cost-efficiency',

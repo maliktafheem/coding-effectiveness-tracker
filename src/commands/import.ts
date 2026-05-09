@@ -22,6 +22,7 @@ import {
   runImport,
   runFixtureImport,
   importAll,
+  loadPluginImporters,
 } from '../importers/registry.js';
 import { sanitizeForOutput } from '../importers/privacy.js';
 import type { ImportResult } from '../importers/types.js';
@@ -58,6 +59,15 @@ export async function handleImport(opts: ImportOptions): Promise<void> {
   const verbose = opts.verbose ?? false;
 
   ensureInitialized(dataDir);
+
+  // Load custom importer plugins from the data directory's plugins/ subdirectory
+  const pluginsDir = join(dataDir, 'plugins');
+  if (existsSync(pluginsDir)) {
+    const pluginCount = await loadPluginImporters(pluginsDir);
+    if (pluginCount > 0 && verbose) {
+      verboseLog(verbose, `Loaded ${pluginCount} custom importer plugin(s) from plugins/`);
+    }
+  }
 
   let storage: Storage | undefined;
   try {

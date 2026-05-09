@@ -13,6 +13,10 @@
  *   "weights": {
  *     "git-correlation": 0.30,
  *     "test-confidence": 0.30
+ *   },
+ *   "thresholds": {
+ *     "activitySessionCap": 20,
+ *     "costCeiling": 2.0
  *   }
  * }
  * ```
@@ -31,6 +35,11 @@ export interface ScoringWeights {
   'rework-indicator': number;
 }
 
+export interface ScoringThresholds {
+  activitySessionCap: number;
+  costCeiling: number;
+}
+
 export const DEFAULT_WEIGHTS: ScoringWeights = {
   'activity-output': 0.15,
   'git-correlation': 0.25,
@@ -40,8 +49,14 @@ export const DEFAULT_WEIGHTS: ScoringWeights = {
   'rework-indicator': 0.10,
 };
 
+export const DEFAULT_THRESHOLDS: ScoringThresholds = {
+  activitySessionCap: 10,
+  costCeiling: 1.0,
+};
+
 export interface ScoringConfig {
   weights: ScoringWeights;
+  thresholds: ScoringThresholds;
 }
 
 /**
@@ -54,7 +69,7 @@ export function loadScoringConfig(dataDir?: string): ScoringConfig {
   const configPath = join(resolved, 'scoring.json');
 
   if (!existsSync(configPath)) {
-    return { weights: { ...DEFAULT_WEIGHTS } };
+    return { weights: { ...DEFAULT_WEIGHTS }, thresholds: { ...DEFAULT_THRESHOLDS } };
   }
 
   let raw: unknown;
@@ -64,12 +79,12 @@ export function loadScoringConfig(dataDir?: string): ScoringConfig {
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error(`Warning: Failed to parse scoring.json (${message}), using defaults.`);
-    return { weights: { ...DEFAULT_WEIGHTS } };
+    return { weights: { ...DEFAULT_WEIGHTS }, thresholds: { ...DEFAULT_THRESHOLDS } };
   }
 
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
     console.error('Warning: scoring.json must be a JSON object, using defaults.');
-    return { weights: { ...DEFAULT_WEIGHTS } };
+    return { weights: { ...DEFAULT_WEIGHTS }, thresholds: { ...DEFAULT_THRESHOLDS } };
   }
 
   const obj = raw as Record<string, unknown>;
@@ -93,7 +108,7 @@ export function loadScoringConfig(dataDir?: string): ScoringConfig {
 
     if (errors.length > 0) {
       console.error(`Warning: Invalid scoring.json weights:\n  ${errors.join('\n  ')}\nUsing defaults.`);
-      return { weights: { ...DEFAULT_WEIGHTS } };
+      return { weights: { ...DEFAULT_WEIGHTS }, thresholds: { ...DEFAULT_THRESHOLDS } };
     }
   }
 
@@ -108,5 +123,17 @@ export function loadScoringConfig(dataDir?: string): ScoringConfig {
     }
   }
 
-  return { weights: merged };
+  // Parse thresholds
+  const thresholds: ScoringThresholds = { ...DEFAULT_THRESHOLDS };
+  if (obj.thresholds && typeof obj.thresholds === 'object' && !Array.isArray(obj.thresholds)) {
+    const userThresholds = obj.thresholds as Record<string, unknown>;
+    if (typeof userThresholds.activitySessionCap === 'number' && userThresholds.activitySessionCap > 0) {
+      thresholds.activitySessionCap = userThresholds.activitySessionCap;
+    }
+    if (typeof userThresholds.costCeiling === 'number' && userThresholds.costCeiling > 0) {
+      thresholds.costCeiling = userThresholds.costCeiling;
+    }
+  }
+
+  return { weights: merged, thresholds };
 }

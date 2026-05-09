@@ -1,10 +1,19 @@
 import { useFetch } from './useFetch';
 import type { OverviewData } from './types';
 
+const DIMENSION_HINTS: Record<string, string> = {
+  'activity-output': 'Run more AI sessions to increase activity. Try cet setup for automated onboarding.',
+  'git-correlation': 'Sync a git repo with cet sync to link commits. Run AI sessions in git-tracked directories.',
+  'test-confidence': 'Run cet test -- <command> after sessions to capture test outcomes.',
+  'manual-outcome': 'Annotate sessions with cet annotate --session <id> --outcome <label> --score <n>.',
+  'cost-efficiency': 'Track cost/token data. Lower per-session costs improve this score. Adjust costCeiling in scoring.json.',
+  'rework-indicator': 'Minimize retry/redo cycles. Fewer rework attempts yield a higher score.',
+};
+
 export default function OverviewPage({ filterStr }: { filterStr: string }) {
   const { data, loading, error } = useFetch<OverviewData>('/api/overview' + filterStr, [filterStr]);
 
-  if (loading) return <div className="loading">Loading overview...</div>;
+  if (loading) return <div className="loading"><div className="loading-spinner" /><span className="loading-pulse">Analyzing session data…</span></div>;
   if (error) return <div className="error"><h2>Error</h2><p>{error}</p><p>Check that the server is running and try refreshing.</p><button className="btn btn-primary" onClick={() => window.location.reload()} style={{marginTop: 8}}>Retry</button></div>;
   if (!data || data.empty) return (
     <div className="empty">
@@ -54,7 +63,7 @@ export default function OverviewPage({ filterStr }: { filterStr: string }) {
       <div className="card">
         <h2>Score Dimensions</h2>
         <table>
-          <thead><tr><th>Dimension</th><th>Score</th><th>Weight</th><th>Explanation</th></tr></thead>
+          <thead><tr><th>Dimension</th><th>Score</th><th>Weight</th><th>Explanation</th><th>How to Improve</th></tr></thead>
           <tbody>
             {data.score.dimensions.map(dim => (
               <tr key={dim.name}>
@@ -62,6 +71,7 @@ export default function OverviewPage({ filterStr }: { filterStr: string }) {
                 <td>{dim.available ? Math.round(dim.value * 100) + '%' : 'unknown'}</td>
                 <td>{Math.round(dim.weight * 100)}%</td>
                 <td>{dim.explanation}</td>
+                <td>{DIMENSION_HINTS[dim.name] || '—'}</td>
               </tr>
             ))}
           </tbody>

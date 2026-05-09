@@ -186,6 +186,7 @@ function getMigrations(): Migration[] {
           tokens_output INTEGER,
           cost_estimate REAL,
           metadata_json TEXT,
+          tags TEXT,
           created_at TEXT NOT NULL DEFAULT (datetime('now')),
           updated_at TEXT NOT NULL DEFAULT (datetime('now')),
           FOREIGN KEY (source_tool_id) REFERENCES tools(id),

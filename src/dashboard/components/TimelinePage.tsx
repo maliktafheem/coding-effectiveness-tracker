@@ -4,7 +4,7 @@ import type { TimelineSession } from './types';
 export default function TimelinePage({ filterStr, onSelectSession }: { filterStr: string; onSelectSession: (id: string) => void }) {
   const { data, loading, error } = useFetch<{ sessions: TimelineSession[]; total: number }>('/api/timeline' + filterStr, [filterStr]);
 
-  if (loading) return <div className="loading">Loading timeline...</div>;
+  if (loading) return <div className="loading"><div className="loading-spinner" /><span className="loading-pulse">Loading timeline…</span></div>;
   if (error) return <div className="error"><h2>Error</h2><p>{error}</p></div>;
 
   return (

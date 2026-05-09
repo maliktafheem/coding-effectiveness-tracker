@@ -4,7 +4,7 @@ import type { ToolComparison } from './types';
 export default function ToolsPage({ filterStr }: { filterStr: string }) {
   const { data, loading, error } = useFetch<{ tools: ToolComparison[] }>('/api/tools' + filterStr, [filterStr]);
 
-  if (loading) return <div className="loading">Loading tool comparison...</div>;
+  if (loading) return <div className="loading"><div className="loading-spinner" /><span className="loading-pulse">Comparing tools…</span></div>;
   if (error) return <div className="error"><h2>Error</h2><p>{error}</p></div>;
 
   return (

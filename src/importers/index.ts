@@ -6,7 +6,7 @@
  */
 
 export type { NormalizedSession, NormalizedEvent, ImportResult, ImportOptions, ToolImporter } from './types.js';
-export { registerImporter, registerAllImporters, getImporters, getImporter, discoverImporters, runImport, runFixtureImport, importFromTool, importAll } from './registry.js';
+export { registerImporter, registerAllImporters, getImporters, getImporter, discoverImporters, runImport, runFixtureImport, importFromTool, importAll, loadPluginImporters } from './registry.js';
 export { readJsonl } from './utils.js';
 export { redactSecrets, redactMetadata, findCanaryLeaks, sanitizeForOutput, CANARY_SECRETS, ALL_CANARIES } from './privacy.js';
 export { safeResolvePath, assertNoSymlinkEscape, safeLstat, safeReadDir, PathSafetyError } from './path-safety.js';

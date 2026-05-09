@@ -364,4 +364,52 @@ export function registerAllImporters(): void {
   registerImporter(new CursorImporter());
 }
 
+/**
+ * Load custom importer plugins from a directory.
+ *
+ * Each plugin file should be a JavaScript module that exports a default
+ * or named class implementing the ToolImporter interface.
+ *
+ * @param pluginsDir - Directory containing plugin .js files
+ * @returns Number of plugins successfully loaded
+ */
+export async function loadPluginImporters(pluginsDir: string): Promise<number> {
+  const { existsSync, readdirSync } = await import('node:fs');
+  const { join, extname } = await import('node:path');
+  const { pathToFileURL } = await import('node:url');
+
+  if (!existsSync(pluginsDir)) return 0;
+
+  let loaded = 0;
+  const files = readdirSync(pluginsDir).filter((f: string) => extname(f) === '.js');
+
+  for (const file of files) {
+    try {
+      const fullPath = join(pluginsDir, file);
+      const mod = await import(pathToFileURL(fullPath).href);
+      // Find a constructor that looks like a ToolImporter (has prototype with canHandle)
+      const ImporterClass = mod.default || Object.values(mod).find(
+        (v: unknown) => {
+          if (typeof v !== 'function') return false;
+          const proto = (v as { prototype?: unknown }).prototype;
+          return proto != null && typeof (proto as Record<string, unknown>).canHandle === 'function';
+        }
+      );
+
+      if (!ImporterClass) {
+        console.warn(`Warning: Skipping plugin ${file} — no valid ToolImporter exported.`);
+        continue;
+      }
+
+      const instance = new (ImporterClass as unknown as new () => ToolImporter)();
+      registerImporter(instance);
+      loaded++;
+    } catch (err) {
+      console.warn(`Warning: Failed to load plugin ${file}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  return loaded;
+}
+
 

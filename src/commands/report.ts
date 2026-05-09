@@ -90,6 +90,7 @@ export async function handleReport(opts: ReportOptions): Promise<void> {
       from: opts.from,
       to: opts.to,
       weights: scoringConfig.weights,
+      thresholds: scoringConfig.thresholds,
     });
 
     // Gather source tools

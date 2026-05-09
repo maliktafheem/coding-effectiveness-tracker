@@ -1,0 +1,653 @@
+/* ==========================================================================
+   Coding Effectiveness Tracker — Dashboard Styles
+   Aesthetic: Precision Terminal Analytics
+   Type: JetBrains Mono / Cascadia Code — monospace developer tool identity
+   Accent: IDE syntax-highlighting colors (cyan, green, amber)
+   Background: Deep slate with scan-line overlay + grid texture
+   ========================================================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
+:root {
+  /* Core palette */
+  --bg-deep: #0a0f18;
+  --bg-surface: #111827;
+  --bg-card: #161e2e;
+  --bg-card-hover: #1a2438;
+  --bg-input: #0d1320;
+  --border-subtle: #1e2a3d;
+  --border-accent: #2d3d5c;
+
+  /* Text */
+  --text-primary: #e4eaf6;
+  --text-secondary: #8493ad;
+  --text-muted: #54627a;
+
+  /* Accent — IDE syntax highlighting palette */
+  --accent-cyan: #22d3ee;      /* keywords */
+  --accent-green: #34d399;     /* strings */
+  --accent-amber: #fbbf24;     /* warnings */
+  --accent-violet: #a78bfa;    /* functions */
+  --accent-rose: #fb7185;      /* errors */
+  --accent-blue: #60a5fa;      /* types */
+
+  /* Semantic */
+  --success: #166534;
+  --success-text: #86efac;
+  --warning: #854d0e;
+  --warning-text: #fde68a;
+  --error-bg: #451a1a;
+  --error-border: #7f1d1d;
+  --error-text: #fca5a5;
+
+  /* Spacing */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+
+  /* Typography */
+  --font-mono: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace;
+  --font-size-xs: 0.7rem;
+  --font-size-sm: 0.8rem;
+  --font-size-md: 0.9rem;
+  --font-size-lg: 1.2rem;
+  --font-size-xl: 1.6rem;
+  --font-size-stat: 2.2rem;
+
+  /* Radii */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+
+  /* Transitions */
+  --transition-fast: 150ms ease;
+  --transition-base: 200ms ease;
+  --transition-slow: 400ms ease;
+}
+
+/* ==========================================================================
+   Reset & Base
+   ========================================================================== */
+
+*, *::before, *::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: var(--font-mono);
+  background: var(--bg-deep);
+  color: var(--text-primary);
+  line-height: 1.6;
+  font-size: var(--font-size-md);
+  font-weight: 400;
+  /* Scan-line texture overlay */
+  background-image:
+    repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0, 0, 0, 0.03) 2px,
+      rgba(0, 0, 0, 0.03) 4px
+    );
+  min-height: 100vh;
+  letter-spacing: -0.01em;
+}
+
+a {
+  color: var(--accent-cyan);
+  text-decoration: none;
+  transition: color var(--transition-fast);
+}
+
+a:hover {
+  color: var(--accent-violet);
+}
+
+/* ==========================================================================
+   Layout
+   ========================================================================== */
+
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: var(--space-lg);
+}
+
+/* ==========================================================================
+   Header & Navigation
+   ========================================================================== */
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-lg);
+  padding-bottom: var(--space-md);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.header h1 {
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: 0.03em;
+}
+
+.header h1::before {
+  content: '▸ ';
+  color: var(--accent-cyan);
+}
+
+.nav {
+  display: flex;
+  gap: var(--space-sm);
+}
+
+.nav a {
+  padding: 6px 14px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  transition: all var(--transition-base);
+  border: 1px solid transparent;
+  letter-spacing: 0.02em;
+}
+
+.nav a:hover, .nav a.active {
+  background: var(--bg-card-hover);
+  color: var(--accent-cyan);
+  border-color: var(--border-accent);
+}
+
+/* ==========================================================================
+   Cards
+   ========================================================================== */
+
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: var(--space-lg);
+  margin-bottom: var(--space-md);
+  transition: border-color var(--transition-base);
+  /* Subtle inner grid texture */
+  background-image:
+    linear-gradient(var(--border-subtle) 1px, transparent 1px),
+    linear-gradient(90deg, var(--border-subtle) 1px, transparent 1px);
+  background-size: 24px 24px;
+  background-position: center center;
+}
+
+.card:hover {
+  border-color: var(--border-accent);
+}
+
+.card h2 {
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+  margin-bottom: var(--space-md);
+  color: var(--text-primary);
+  letter-spacing: 0.04em;
+}
+
+.card h2::before {
+  content: '# ';
+  color: var(--accent-violet);
+  font-weight: 400;
+}
+
+/* ==========================================================================
+   Stats Grid
+   ========================================================================== */
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--space-md);
+  margin-bottom: var(--space-lg);
+}
+
+.stat {
+  text-align: center;
+  padding: var(--space-md);
+}
+
+.stat .value {
+  font-size: var(--font-size-stat);
+  font-weight: 700;
+  color: var(--accent-cyan);
+  letter-spacing: 0.02em;
+  font-feature-settings: "tnum";
+}
+
+.stat .label {
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-top: var(--space-xs);
+}
+
+/* ==========================================================================
+   Score Bar
+   ========================================================================== */
+
+.score-bar {
+  height: 6px;
+  background: var(--bg-input);
+  border-radius: 3px;
+  margin: var(--space-sm) 0;
+  overflow: hidden;
+}
+
+.score-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ==========================================================================
+   Filter Bar
+   ========================================================================== */
+
+.filter-bar {
+  display: flex;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-md);
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.filter-bar label {
+  color: var(--text-muted);
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-right: var(--space-xs);
+}
+
+.filter-bar select, .filter-bar input {
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+  transition: border-color var(--transition-fast);
+}
+
+.filter-bar select:focus, .filter-bar input:focus {
+  outline: none;
+  border-color: var(--accent-cyan);
+}
+
+/* ==========================================================================
+   Buttons
+   ========================================================================== */
+
+.btn {
+  padding: 6px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  transition: all var(--transition-fast);
+}
+
+.btn-primary {
+  background: var(--accent-blue);
+  color: var(--bg-deep);
+  border-color: var(--accent-blue);
+}
+
+.btn-primary:hover {
+  background: var(--accent-cyan);
+  border-color: var(--accent-cyan);
+}
+
+.btn-secondary {
+  background: var(--bg-card);
+  color: var(--text-secondary);
+}
+
+.btn-secondary:hover {
+  background: var(--bg-card-hover);
+  color: var(--text-primary);
+  border-color: var(--border-accent);
+}
+
+/* ==========================================================================
+   Tables
+   ========================================================================== */
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-size-sm);
+  font-feature-settings: "tnum";
+}
+
+th, td {
+  padding: 10px 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+th {
+  color: var(--text-muted);
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 500;
+}
+
+tr:hover td {
+  background: rgba(255, 255, 255, 0.015);
+}
+
+/* ==========================================================================
+   Tags / Chips
+   ========================================================================== */
+
+.tag {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  color: var(--accent-cyan);
+  font-size: var(--font-size-xs);
+  font-family: var(--font-mono);
+  letter-spacing: 0.03em;
+  margin-right: 4px;
+  margin-bottom: 4px;
+  border: 1px solid var(--border-subtle);
+}
+
+.tag::before {
+  content: '#';
+  opacity: 0.5;
+  margin-right: 1px;
+}
+
+/* ==========================================================================
+   Correlation Badges
+   ========================================================================== */
+
+.correlation-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-xs);
+  font-family: var(--font-mono);
+  letter-spacing: 0.03em;
+  font-weight: 500;
+}
+
+.correlation-badge.high {
+  background: var(--success);
+  color: var(--success-text);
+}
+
+.correlation-badge.medium {
+  background: var(--warning);
+  color: var(--warning-text);
+}
+
+.correlation-badge.low {
+  background: var(--error-bg);
+  color: var(--error-text);
+}
+
+/* ==========================================================================
+   Loading & Empty States
+   ========================================================================== */
+
+.loading {
+  text-align: center;
+  padding: var(--space-xl);
+  color: var(--text-muted);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-md);
+}
+
+.loading-spinner {
+  width: 32px;
+  height: 32px;
+  border: 2px solid var(--border-subtle);
+  border-top-color: var(--accent-cyan);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.loading-pulse {
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+/* Skeleton loading for tables */
+.skeleton {
+  background: linear-gradient(90deg, var(--bg-card) 25%, var(--bg-card-hover) 50%, var(--bg-card) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s infinite;
+  border-radius: var(--radius-sm);
+}
+
+.skeleton-row {
+  height: 36px;
+  margin-bottom: 6px;
+}
+
+@keyframes skeleton-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.empty {
+  text-align: center;
+  padding: var(--space-xl) var(--space-md);
+  color: var(--text-secondary);
+}
+
+.empty h2 {
+  color: var(--accent-cyan);
+  margin-bottom: var(--space-md);
+  font-size: var(--font-size-lg);
+}
+
+.empty h2::before {
+  content: '▸ ';
+  color: var(--accent-cyan);
+}
+
+.empty .quick-start {
+  margin-top: var(--space-md);
+  text-align: left;
+  display: inline-block;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: var(--space-md);
+}
+
+.empty .quick-start code {
+  display: block;
+  padding: 4px 0;
+  color: var(--accent-green);
+  font-size: var(--font-size-sm);
+}
+
+/* ==========================================================================
+   Errors
+   ========================================================================== */
+
+.error {
+  background: var(--error-bg);
+  border: 1px solid var(--error-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-md);
+  color: var(--error-text);
+}
+
+.error h2 {
+  color: var(--accent-rose);
+  margin-bottom: var(--space-sm);
+}
+
+.error h2::before {
+  content: '✕ ';
+  color: var(--accent-rose);
+}
+
+/* ==========================================================================
+   Annotations
+   ========================================================================== */
+
+.annotation-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.annotation-form select,
+.annotation-form input,
+.annotation-form textarea {
+  padding: 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+}
+
+.annotation-form select:focus,
+.annotation-form input:focus,
+.annotation-form textarea:focus {
+  outline: none;
+  border-color: var(--accent-violet);
+}
+
+/* ==========================================================================
+   Toast
+   ========================================================================== */
+
+.toast {
+  position: fixed;
+  bottom: var(--space-lg);
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--success);
+  color: var(--success-text);
+  padding: 12px 24px;
+  border-radius: var(--radius-md);
+  z-index: 200;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+  animation: toastIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  border: 1px solid var(--accent-green);
+}
+
+@keyframes toastIn {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+/* ==========================================================================
+   Export Button
+   ========================================================================== */
+
+.export-btn {
+  position: fixed;
+  bottom: var(--space-lg);
+  right: var(--space-lg);
+  z-index: 100;
+}
+
+/* ==========================================================================
+   Tooltip (How to Improve column)
+   ========================================================================== */
+
+.tooltip-hint {
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+  font-style: italic;
+  max-width: 200px;
+}
+
+/* ==========================================================================
+   Session Detail
+   ========================================================================== */
+
+.session-back {
+  margin-bottom: var(--space-md);
+}
+
+.session-back a {
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+  transition: color var(--transition-fast);
+}
+
+.session-back a:hover {
+  color: var(--accent-cyan);
+}
+
+.session-back a::before {
+  content: '← ';
+}
+
+.session-meta {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--space-sm);
+  margin: var(--space-md) 0;
+  padding: var(--space-md);
+  background: var(--bg-input);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+}
+
+.session-meta-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.session-meta-item .meta-label {
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.session-meta-item .meta-value {
+  font-size: var(--font-size-md);
+  color: var(--text-primary);
+  font-weight: 500;
+}

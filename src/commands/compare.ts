@@ -56,6 +56,7 @@ export async function handleCompare(opts: CompareOptions): Promise<void> {
         const score = computeEffectivenessScore(storage!, {
           toolId: tool, projectId: opts.project,
           weights: scoringConfig.weights,
+          thresholds: scoringConfig.thresholds,
         });
         results.push({ tool, sessions: sessions.cnt, score: score.aggregate });
         console.log(`${tool.padEnd(18)} ${String(sessions.cnt).padStart(4)} sessions  Score: ${Math.round(score.aggregate * 100)}%`);
@@ -78,6 +79,7 @@ export async function handleCompare(opts: CompareOptions): Promise<void> {
         const score = computeEffectivenessScore(storage!, {
           projectId: p.id, toolId: opts.tool,
           weights: scoringConfig.weights,
+          thresholds: scoringConfig.thresholds,
         });
         console.log(`${(p.name || p.id).padEnd(25)} ${String(sessions.cnt).padStart(4)} sessions  Score: ${Math.round(score.aggregate * 100)}%`);
       }
@@ -93,7 +95,7 @@ export async function handleCompare(opts: CompareOptions): Promise<void> {
       const period1Start = (opts.from1 || fourWeeksAgo.toISOString().slice(0, 10));
       const period1End = (opts.to1 || twoWeeksAgo.toISOString().slice(0, 10));
 
-      const baseOpts = { projectId: opts.project, toolId: opts.tool, weights: scoringConfig.weights };
+      const baseOpts = { projectId: opts.project, toolId: opts.tool, weights: scoringConfig.weights, thresholds: scoringConfig.thresholds };
       const score1 = computeEffectivenessScore(storage!, { ...baseOpts, from: period1Start, to: period1End });
       const score2 = computeEffectivenessScore(storage!, { ...baseOpts, from: period2Start, to: period2End });
 

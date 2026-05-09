@@ -54,6 +54,7 @@ export function generateJsonExport(storage: Storage, opts: ExportOptions): JsonE
   const score = computeEffectivenessScore(storage, {
     toolId: opts.toolId, projectId: opts.projectId, from: opts.from, to: opts.to,
     weights: scoreConfig.weights,
+    thresholds: scoreConfig.thresholds,
   });
   const tools = [...new Set(sessions.map(s => s.source_tool_id as string))];
   const enriched = sessions.map(s => {

@@ -136,6 +136,22 @@ function correlateWithGitCommits(
     }
   }
 
+  // Branch-aware bonus: if all correlated commits share the same branch,
+  // that suggests focused work on a feature — boost confidence.
+  if (results.length >= 2) {
+    const branches = commits
+      .filter(c => results.some(r => r.targetId === c.id))
+      .map(c => c.branch as string | null)
+      .filter((b): b is string => b != null);
+
+    if (branches.length >= 2 && new Set(branches).size === 1) {
+      for (const r of results) {
+        r.confidence = Math.min(r.confidence + 0.1, 1);
+        r.reasons.push(`all commits on same branch: ${branches[0]}`);
+      }
+    }
+  }
+
   return results;
 }
 

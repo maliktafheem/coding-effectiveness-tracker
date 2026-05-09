@@ -235,9 +235,12 @@ export function registerRoutes(app: FastifyInstance, opts: ServerOptions): void 
         if (filters.to) { countSql += ' AND started_at <= ?'; countParams.push(filters.to); }
         const { cnt: sessionCount } = db.prepare(countSql).get(...countParams) as { cnt: number };
 
+        const scoringConfig = loadScoringConfig(dataDir);
         const score = computeEffectivenessScore(storage, {
           toolId, projectId: filters.project,
           from: filters.from, to: filters.to,
+          weights: scoringConfig.weights,
+          thresholds: scoringConfig.thresholds,
         });
 
         let outcomeCount: number;

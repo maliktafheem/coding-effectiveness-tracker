@@ -11,6 +11,7 @@ import { handleCompare } from './commands/compare.js';
 import { handleServe } from './commands/serve.js';
 import { handleExport } from './commands/export.js';
 import { handleWatch } from './commands/watch.js';
+import { handleTag } from './commands/tag.js';
 
 // Ensure all importers are registered
 import './importers/index.js';
@@ -74,6 +75,15 @@ program
   .option('--note <text>', 'Free-text note for the annotation')
   .option('--tags <tags>', 'Comma-separated tags')
   .action(handleAnnotate);
+
+program
+  .command('tag')
+  .description('Tag sessions with labels for filtering and organization')
+  .requiredOption('--session <id>', 'Session ID to tag')
+  .option('--tags <tags>', 'Comma-separated tags')
+  .option('--remove', 'Remove the specified tags instead of adding')
+  .option('--list', 'List current tags on the session')
+  .action(handleTag);
 
 program
   .command('sync')

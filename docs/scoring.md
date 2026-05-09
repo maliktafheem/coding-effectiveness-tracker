@@ -6,10 +6,10 @@ Coding Effectiveness Tracker computes a **balanced aggregate score** from six di
 
 ### 1. Activity / Output (weight: 0.15)
 
-Measures how many AI coding sessions were completed in the selected period. Reaches 100% at 10 sessions or more.
+Measures how many AI coding sessions were completed in the selected period. Reaches 100% at the configured `activitySessionCap` sessions (default: 10).
 
 ```
-activity = min(sessionCount / 10, 1)
+activity = min(sessionCount / activitySessionCap, 1)
 ```
 
 **Available when:** at least one session exists.
@@ -51,7 +51,7 @@ Average of user-assigned outcome scores (0–1) from `cet annotate`. These are e
 Derived from cost and token data when available from AI tools. Higher costs relative to sessions reduce the score.
 
 ```
-costScore = 1 - min(avgCostPerSession / $1.00, 1)
+costScore = 1 - min(avgCostPerSession / costCeiling, 1)
 ```
 
 **Available when:** cost data exists on at least one session.
@@ -96,10 +96,26 @@ Create a `scoring.json` file in your tracker data directory to override default 
 ```
 
 - **Location:** `<data-dir>/scoring.json` (typically `~/.coding-effectiveness-tracker/scoring.json`)
-- **Format:** JSON object with a `"weights"` key
+- **Format:** JSON object with a `"weights"` key and optional `"thresholds"` key
 - **Unspecified weights:** Fall back to defaults
 - **Validation:** Weights must be numbers between 0 and 1. Invalid config falls back to defaults with a warning
 - **Normalization:** Weights are normalized to sum to 1.0
+- **Thresholds:** `activitySessionCap` controls the session count that reaches 100% activity score (default: 10). `costCeiling` controls the per-session cost that reaches 0% cost efficiency (default: 1.0 dollars)
+
+Example with thresholds:
+
+```json
+{
+  "weights": {
+    "git-correlation": 0.30,
+    "test-confidence": 0.30
+  },
+  "thresholds": {
+    "activitySessionCap": 20,
+    "costCeiling": 2.0
+  }
+}
+```
 
 ### Windows
 
