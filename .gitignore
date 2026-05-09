@@ -6,3 +6,11 @@ dist/
 .DS_Store
 .env
 *.db-journal
+
+# Generated artifacts
+coverage/
+
+# Factory/Agent internal files - not part of the public project
+.agents/
+docs/superpowers/
+skills-lock.json
