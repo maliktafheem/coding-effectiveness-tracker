@@ -174,7 +174,7 @@ export function computeEffectivenessScore(
   }
 
   // ─── Dimension 6: Rework Indicator ─────────────────────────────────────
-  const reworkDim = computeReworkDimension(sessions, weights);
+  const reworkDim = computeReworkDimension(db, sessions, weights);
   dimensions.push(reworkDim);
 
   // ─── Aggregate Score ───────────────────────────────────────────────────
@@ -400,39 +400,66 @@ function computeCostDimension(
 }
 
 function computeReworkDimension(
+  db: Database.Database,
   sessions: Record<string, unknown>[],
   weights: ScoringWeights,
 ): ScoreDimension {
-  let totalRework = 0;
-  let sessionsWithRework = 0;
-
-  for (const s of sessions) {
-    if (s.metadata_json) {
-      try {
-        const meta = JSON.parse(s.metadata_json as string);
-        if (meta.reworkCount && meta.reworkCount > 0) {
-          totalRework += meta.reworkCount;
-          sessionsWithRework++;
-        }
-      } catch {
-        // ignore parse errors
-      }
-    }
-  }
-
   if (sessions.length === 0) {
     return { name: 'rework-indicator', value: 1, weight: weights['rework-indicator'], explanation: 'No sessions to evaluate rework.', available: false };
   }
 
+  const sessionIds = sessions.map(s => s.id as string);
+
+  // Single aggregate query using SQLite JSON1 — avoids per-session JSON.parse
+  // and surfaces malformed metadata_json rows that were previously silently ignored.
+  const sql = `
+    SELECT
+      SUM(CASE WHEN rework > 0 THEN 1 ELSE 0 END) AS sessions_with_rework,
+      SUM(rework) AS total_rework,
+      SUM(CASE WHEN metadata_json IS NOT NULL AND json_valid(metadata_json) = 0 THEN 1 ELSE 0 END) AS invalid_json_count
+    FROM (
+      SELECT
+        CASE WHEN json_valid(metadata_json) = 1
+             THEN COALESCE(CAST(json_extract(metadata_json, '$.reworkCount') AS INTEGER), 0)
+             ELSE 0
+        END AS rework,
+        metadata_json
+      FROM sessions
+      WHERE id IN (SELECT value FROM json_each(?))
+    )
+  `;
+
+  const row = db.prepare(sql).get(JSON.stringify(sessionIds)) as {
+    sessions_with_rework: number | null;
+    total_rework: number | null;
+    invalid_json_count: number | null;
+  };
+
+  const sessionsWithRework = row.sessions_with_rework ?? 0;
+  const totalRework = row.total_rework ?? 0;
+  const invalidJsonCount = row.invalid_json_count ?? 0;
+
+  // All-malformed case: no valid rework signal at all — do not silently score 1.
+  if (invalidJsonCount > 0 && sessionsWithRework === 0 && totalRework === 0) {
+    return {
+      name: 'rework-indicator',
+      value: 1,
+      weight: weights['rework-indicator'],
+      explanation: 'Some session metadata could not be parsed (unparseable metadata); rework signal unavailable.',
+      available: false,
+    };
+  }
+
   const reworkRatio = sessionsWithRework / sessions.length;
   const score = Math.max(0, 1 - reworkRatio);
+  const malformedNote = invalidJsonCount > 0 ? ` (${invalidJsonCount} session(s) had unparseable metadata)` : '';
 
   if (totalRework > 0) {
     return {
       name: 'rework-indicator',
       value: Math.round(score * 1000) / 1000,
       weight: weights['rework-indicator'],
-      explanation: `${sessionsWithRework} of ${sessions.length} session(s) had rework/retry attempts (${totalRework} total retries). Rework rate: ${Math.round(reworkRatio * 100)}%.`,
+      explanation: `${sessionsWithRework} of ${sessions.length} session(s) had rework/retry attempts (${totalRework} total retries). Rework rate: ${Math.round(reworkRatio * 100)}%.${malformedNote}`,
       available: true,
     };
   }
@@ -441,7 +468,7 @@ function computeReworkDimension(
     name: 'rework-indicator',
     value: 1,
     weight: weights['rework-indicator'],
-    explanation: 'No rework or retry indicators detected in session metadata.',
+    explanation: `No rework or retry indicators detected in session metadata.${malformedNote}`,
     available: true,
   };
 }
