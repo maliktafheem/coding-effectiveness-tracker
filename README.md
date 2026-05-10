@@ -7,7 +7,39 @@
   <a href="https://github.com/TafheemMalik/coding-effectiveness-tracker/actions"><img src="https://img.shields.io/github/actions/workflow/status/TafheemMalik/coding-effectiveness-tracker/ci.yml" alt="CI Status"></a>
 </p>
 
-Local-first personal tracker for understanding whether AI-assisted coding workflows are effective. It imports and correlates sessions from Claude Code, Codex, OpenCode, Factory Droid, and Cursor with local Git commits, test outcomes, manual annotations, reports, a local dashboard/API, and privacy-safe exports.
+> Stop guessing. See whether AI-assisted coding is actually shipping code.
+
+<p align="center">
+  <img src="docs/assets/screenshot-overview.png" alt="Overview dashboard showing effectiveness score, session count, and weekly trend" width="820">
+</p>
+
+Local-first tracker for AI coding sessions. Imports from Claude Code, Codex, OpenCode, Cursor, and Factory Droid. Correlates sessions with your local Git history and test results. Scores six dimensions. Everything stays on your machine — no telemetry, no accounts, loopback-only dashboard.
+
+## Try it in 60 seconds
+
+```bash
+npm install && npm run build
+npx cet setup
+```
+
+Dashboard opens at `http://127.0.0.1:43187`. Ctrl+C when done.
+
+## What you see
+
+<p align="center">
+  <img src="docs/assets/screenshot-timeline.png" alt="Timeline of 24 sessions showing tool, project, summary, duration, correlation count, outcome, and rework attempts" width="820">
+  <br><em>Timeline — every session linked to commits, test outcomes, and manual annotations</em>
+</p>
+
+<p align="center">
+  <img src="docs/assets/screenshot-tools.png" alt="Per-tool comparison of Claude Code, Codex, OpenCode, Cursor showing sessions, outcomes, and effectiveness scores" width="820">
+  <br><em>Tools — which AI helps you ship, which slows you down</em>
+</p>
+
+<p align="center">
+  <img src="docs/assets/screenshot-session-detail.png" alt="Session detail showing tool, project, model, duration, tokens, cost, correlations, and annotations" width="820">
+  <br><em>Session detail — drill into tokens, cost, correlated commits, and outcomes</em>
+</p>
 
 ---
 
@@ -214,23 +246,6 @@ Use query filters such as `tool`, `project`, `from`, `to`, and `raw=true` where 
 
 For detailed API reference, see [docs/api-reference.md](docs/api-reference.md).
 
-## Dashboard Screenshots
-
-<p align="center">
-  <img src="docs/assets/screenshot-overview.png" alt="Dashboard Overview" width="700">
-  <br><em>Overview page — aggregate score, session stats, and score dimensions</em>
-</p>
-
-<p align="center">
-  <img src="docs/assets/screenshot-Timeline.png" alt="Dashboard Timeline" width="700">
-  <br><em>Timeline page — session history with correlation and outcome data</em>
-</p>
-
-<p align="center">
-  <img src="docs/assets/screenshot-Tools.png" alt="Dashboard Tools" width="700">
-  <br><em>Tools page — per-tool comparison of sessions, annotations, and effectiveness scores</em>
-</p>
-
 ## Data Directory
 
 By default, tracker data is stored in `%LOCALAPPDATA%\coding-effectiveness-tracker` on Windows and `~/.coding-effectiveness-tracker` on other platforms. Override this with `--data-dir <path>` or the `CET_DATA_DIR` environment variable. The data directory contains the local SQLite database plus importer, export, and correlation subdirectories.
@@ -244,7 +259,7 @@ Comprehensive documentation is available in the [docs/](docs/) folder:
 - [Architecture](docs/architecture.md) — System components, data flow, and key patterns
 - [Development Guide](docs/development.md) — Setup, build/test, project structure, cross-platform notes
 - [CLI Reference](docs/cli-reference.md) — All CLI commands with options and examples
-- [API Reference](docs/api-reference.md) — All 10 API endpoints with query parameters and response shapes
+- [API Reference](docs/api-reference.md) — All 12 API endpoints with query parameters and response shapes
 - [Data Model](docs/data-model.md) — Database tables, columns, indexes, and relationships
 - [Scoring Model](docs/scoring.md) — Effectiveness dimensions, weights, and configuration
 - [Importer Guide](docs/importer-guide.md) — ToolImporter interface, registration, and privacy redaction

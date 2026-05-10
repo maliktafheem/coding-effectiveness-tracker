@@ -10,6 +10,9 @@ dist/
 # Generated artifacts
 coverage/
 
+# Scratch data used to generate the docs/assets screenshots — not committed.
+docs/assets/.demo-data/
+
 # Factory/Agent internal files - not part of the public project
 .agents/
 docs/superpowers/
