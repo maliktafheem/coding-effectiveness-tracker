@@ -60,22 +60,24 @@ export default function PromptQualityPage() {
         </table>
       </div>
 
-      <div className="card">
-        <h3>Worst 10 prompts (learning opportunities)</h3>
-        <table>
-          <thead><tr><th>Score</th><th>Session</th><th>Tool</th><th>Started</th></tr></thead>
-          <tbody>
-            {worst.map((s) => (
-              <tr key={s.sessionId}>
-                <td><strong>{(s.overall * 100).toFixed(0)}%</strong></td>
-                <td><code>{s.sessionId.slice(0, 8)}</code></td>
-                <td><span className="tag">{s.toolId}</span></td>
-                <td>{s.startedAt ? new Date(s.startedAt).toLocaleDateString() : '-'}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      {data.sessions.length > 10 && (
+        <div className="card">
+          <h3>Worst prompts (learning opportunities)</h3>
+          <table>
+            <thead><tr><th>Score</th><th>Session</th><th>Tool</th><th>Started</th></tr></thead>
+            <tbody>
+              {worst.map((s) => (
+                <tr key={s.sessionId}>
+                  <td><strong>{(s.overall * 100).toFixed(0)}%</strong></td>
+                  <td><code>{s.sessionId.slice(0, 8)}</code></td>
+                  <td><span className="tag">{s.toolId}</span></td>
+                  <td>{s.startedAt ? new Date(s.startedAt).toLocaleDateString() : '-'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </>
   );
 }

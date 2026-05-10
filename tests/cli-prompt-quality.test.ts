@@ -109,4 +109,18 @@ describe('cet prompt-quality CLI', () => {
       }),
     ).toThrow();
   });
+
+  it('--analyzer unknown-id prints clean error and exits 1', () => {
+    try {
+      execFileSync('node', [CLI, 'prompt-quality', '--data-dir', dataDir, '--analyzer', 'nope'], {
+        encoding: 'utf-8',
+      });
+      expect.fail('should have thrown');
+    } catch (err: unknown) {
+      const e = err as { stderr?: string; stdout?: string; status?: number };
+      const combined = (e.stderr ?? '') + (e.stdout ?? '');
+      expect(combined).toMatch(/Unknown analyzer/);
+      expect(e.status).toBe(1);
+    }
+  });
 });

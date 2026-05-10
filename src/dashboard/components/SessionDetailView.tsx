@@ -119,6 +119,33 @@ export default function SessionDetailView({ sessionId, onBack }: { sessionId: st
         )}
       </div>
 
+      {data.promptQuality && (
+        <div className="card">
+          <h2>Prompt quality</h2>
+          <div style={{ display: 'flex', gap: 24, alignItems: 'baseline' }}>
+            <p style={{ fontSize: '2rem', margin: 0 }}>
+              {(data.promptQuality.overall * 100).toFixed(0)}%
+            </p>
+            <span style={{ color: '#94a3b8' }}>
+              <code>{data.promptQuality.analyzerId}@{data.promptQuality.analyzerVersion}</code>
+              {' · '}
+              computed {new Date(data.promptQuality.computedAt).toLocaleDateString()}
+            </span>
+          </div>
+          <div style={{ marginTop: 16 }}>
+            {Object.entries(data.promptQuality.signals).map(([name, value]) => (
+              <div key={name} style={{ display: 'grid', gridTemplateColumns: '150px 1fr 50px', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                <span style={{ color: '#cbd5e1' }}>{name}</span>
+                <div style={{ background: '#1e293b', height: 8, borderRadius: 4, overflow: 'hidden' }}>
+                  <div style={{ background: '#22c55e', height: '100%', width: `${value * 100}%` }} />
+                </div>
+                <span style={{ color: '#94a3b8', textAlign: 'right' }}>{(value * 100).toFixed(0)}%</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <DiffPanel sessionId={sessionId} />
 
       <div className="card">

@@ -26,24 +26,39 @@ export async function handlePromptQuality(opts: PromptQualityOptions): Promise<v
 
     if (opts.session) {
       // --session mode: compute (or fetch) and print one
-      const result = await computeSingle(storage, opts.session, {
-        recompute: opts.recompute === true,
-        analyzerId: opts.analyzer,
-      });
-      if (!result) {
-        process.stderr.write(`Session not found: ${opts.session}\n`);
+      try {
+        const result = await computeSingle(storage, opts.session, {
+          recompute: opts.recompute === true,
+          analyzerId: opts.analyzer,
+        });
+        if (!result) {
+          process.stderr.write(`Session not found: ${opts.session}\n`);
+          process.exitCode = 1;
+          return;
+        }
+        printDetail(opts.session, result);
+        return;
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        process.stderr.write(msg + '\n');
         process.exitCode = 1;
         return;
       }
-      printDetail(opts.session, result);
-      return;
     }
 
     // Batch mode: compute all, then optionally top/worst
-    const summary = await computeAll(storage, {
-      recompute: opts.recompute === true,
-      analyzerId: opts.analyzer,
-    });
+    let summary;
+    try {
+      summary = await computeAll(storage, {
+        recompute: opts.recompute === true,
+        analyzerId: opts.analyzer,
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      process.stderr.write(msg + '\n');
+      process.exitCode = 1;
+      return;
+    }
     process.stdout.write(
       `Computed ${summary.computed} session(s), skipped ${summary.skipped} (already cached).\n`,
     );
