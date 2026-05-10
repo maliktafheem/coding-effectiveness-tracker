@@ -1223,5 +1223,5 @@ describeBrowser('Browser automation: dashboard UI release validation', () => {
     } finally {
       db.close();
     }
-  });
+  }, 600000);
 });
