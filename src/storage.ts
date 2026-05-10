@@ -281,5 +281,29 @@ function getMigrations(): Migration[] {
         CREATE INDEX IF NOT EXISTS idx_correlations_type ON correlations(correlation_type);
       `,
     },
+    {
+      name: '002_v02_features',
+      sql: `
+        CREATE TABLE IF NOT EXISTS session_diffs (
+          id TEXT PRIMARY KEY,
+          session_id TEXT NOT NULL,
+          commit_hash TEXT NOT NULL,
+          diff_text TEXT,
+          stats_json TEXT NOT NULL,
+          cached_at INTEGER NOT NULL,
+          size_bytes INTEGER NOT NULL,
+          skipped_reason TEXT,
+          FOREIGN KEY (session_id) REFERENCES sessions(id)
+        );
+
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_session_diffs_unique
+          ON session_diffs(session_id, commit_hash);
+
+        CREATE INDEX IF NOT EXISTS idx_session_diffs_session
+          ON session_diffs(session_id);
+
+        ALTER TABLE sessions ADD COLUMN prompt_quality_json TEXT;
+      `,
+    },
   ];
 }

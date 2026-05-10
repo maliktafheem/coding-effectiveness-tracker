@@ -112,8 +112,8 @@ describe('Storage', () => {
       const migrations = storage2.db
         .prepare('SELECT * FROM _migrations')
         .all() as { name: string }[];
-      expect(migrations.length).toBe(1);
-      expect(migrations[0].name).toBe('001_core_schema');
+      expect(migrations.length).toBe(2);
+      expect(migrations.map((m) => m.name)).toEqual(['001_core_schema', '002_v02_features']);
     } finally {
       storage2.close();
     }
@@ -208,5 +208,44 @@ describe('Storage', () => {
     storage.close();
     expect(() => storage.db).toThrow(StorageError);
     expect(() => storage.db).toThrow('Database is not open');
+  });
+});
+
+describe('migration 002_v02_features', () => {
+  let dir: string;
+  let storage: Storage;
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'cet-mig-'));
+    storage = Storage.open({ dataDir: dir });
+  });
+
+  afterEach(() => {
+    storage.close();
+    safeCleanup(dir);
+  });
+
+  it('creates session_diffs table with unique(session_id, commit_hash)', () => {
+    const row = storage.db
+      .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='session_diffs'")
+      .get();
+    expect(row).toBeDefined();
+    const idx = storage.db
+      .prepare("SELECT sql FROM sqlite_master WHERE type='index' AND tbl_name='session_diffs'")
+      .all() as { sql: string | null }[];
+    const unique = idx.find((r) => r.sql?.includes('UNIQUE'));
+    expect(unique).toBeTruthy();
+  });
+
+  it('adds prompt_quality_json column to sessions', () => {
+    const cols = storage.db.prepare('PRAGMA table_info(sessions)').all() as { name: string }[];
+    expect(cols.some((c) => c.name === 'prompt_quality_json')).toBe(true);
+  });
+
+  it('migration 002 is recorded in _migrations', () => {
+    const names = storage.db
+      .prepare('SELECT name FROM _migrations ORDER BY id')
+      .all() as { name: string }[];
+    expect(names.map((n) => n.name)).toContain('002_v02_features');
   });
 });
