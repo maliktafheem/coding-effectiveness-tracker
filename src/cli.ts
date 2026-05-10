@@ -12,6 +12,7 @@ import { handleServe } from './commands/serve.js';
 import { handleExport } from './commands/export.js';
 import { handleWatch } from './commands/watch.js';
 import { handleTag } from './commands/tag.js';
+import { handleDiff } from './commands/diff.js';
 
 // Ensure all importers are registered
 import './importers/index.js';
@@ -92,6 +93,17 @@ program
   .option('-r, --repo <path>', 'Path to local Git repository (required)')
   .option('-p, --project <id>', 'Project ID (defaults to repo directory name)')
   .action(handleSync);
+
+program
+  .command('diff <session-id>')
+  .description('Show git diff of commits linked to a session')
+  .option('-d, --data-dir <path>', 'Custom data directory path')
+  .option('-r, --repo <path>', 'Repo path (defaults to session metadata projectPath)')
+  .option('--commit <hash>', 'Filter to single commit by hash/shortHash prefix')
+  .option('--stats', 'Stats only (no diff text)')
+  .option('--files', 'List changed files only')
+  .option('--no-cache', 'Bypass cache and live-fetch from git')
+  .action(handleDiff);
 
 program
   .command('test')
