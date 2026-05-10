@@ -26,6 +26,7 @@ import type {
 } from './contract.js';
 import { getSessionDiffs } from '../analytics/diff-service.js';
 import { getAllResults, getResult } from '../analytics/prompt-quality/service.js';
+import { deriveShipStatus, type ShipStatus } from '../correlation/ship-status.js';
 
 const VALID_OUTCOMES = new Set([
   'good','accepted','merged','shipped','ok','neutral','partial',
@@ -152,6 +153,7 @@ export function registerRoutes(app: FastifyInstance, opts: ServerOptions): void 
           outcomeCount: 0,
           score: { aggregate: 0, dimensions: [], missingInputs: ['No sessions available.'] },
           empty: true, message: 'No sessions found. Import data with: cet import --fixture <path>',
+          shipStatusBreakdown: { shipped: 0, reverted: 0, abandoned: 0, inFlight: 0, unlinked: 0, noPrData: 0 },
         };
       }
       const tools = [...new Set(sessions.map(s => s.source_tool_id as string))];
@@ -168,11 +170,27 @@ export function registerRoutes(app: FastifyInstance, opts: ServerOptions): void 
       if (filters.from) { ocSql += ' AND s.started_at >= ?'; ocParams.push(filters.from); }
       if (filters.to) { ocSql += ' AND s.started_at <= ?'; ocParams.push(filters.to); }
       const outcomeCount = (db.prepare(ocSql).get(...ocParams) as { cnt: number }).cnt;
+
+      // Ship status breakdown
+      const sessionIds = sessions.map(s => s.id as string);
+      const shipMap = deriveShipStatus(db, sessionIds);
+      const shipBreakdown = { shipped: 0, reverted: 0, abandoned: 0, inFlight: 0, unlinked: 0, noPrData: 0 };
+      for (const s of sessionIds) {
+        const v = shipMap.get(s);
+        if (v === 'shipped') shipBreakdown.shipped++;
+        else if (v === 'reverted') shipBreakdown.reverted++;
+        else if (v === 'abandoned') shipBreakdown.abandoned++;
+        else if (v === 'in-flight') shipBreakdown.inFlight++;
+        else if (v === 'unlinked') shipBreakdown.unlinked++;
+        else if (v === null) shipBreakdown.noPrData++;
+      }
+
       return {
         totalSessions: sessions.length, tools,
         dateRange: score.dateRange, outcomeCount,
         score: { aggregate: score.aggregate, dimensions: score.dimensions, missingInputs: score.missingInputs },
         empty: false,
+        shipStatusBreakdown: shipBreakdown,
       };
     } finally { storage.close(); }
   });
@@ -199,6 +217,7 @@ export function registerRoutes(app: FastifyInstance, opts: ServerOptions): void 
       const rowIds = rows.map(r => r.id as string);
       const corrCountMap = new Map<string, number>();
       const outcomesMap = new Map<string, { label: string; score: number | null }[]>();
+      let shipStatusMap: Map<string, ShipStatus | null> = new Map();
       if (rowIds.length > 0) {
         const idsJson = JSON.stringify(rowIds);
         const corrRows = db.prepare(
@@ -214,6 +233,8 @@ export function registerRoutes(app: FastifyInstance, opts: ServerOptions): void 
           list.push({ label: or.label, score: or.score });
           outcomesMap.set(or.session_id, list);
         }
+
+        shipStatusMap = deriveShipStatus(db, rowIds);
       }
 
       const sessions = rows.map(s => {
@@ -243,6 +264,7 @@ export function registerRoutes(app: FastifyInstance, opts: ServerOptions): void 
           outcomeLabels,
           hasOutcome,
           reworkCount,
+          shipStatus: shipStatusMap.get(s.id as string) ?? null,
         };
       });
       return { sessions, total: sessions.length };
@@ -361,6 +383,18 @@ export function registerRoutes(app: FastifyInstance, opts: ServerOptions): void 
           if (typeof parsed.reworkCount === 'number') reworkCount = parsed.reworkCount;
         } catch { /* ignore */ }
       }
+      const shipMap = deriveShipStatus(db, [id]);
+      const shipStatus = shipMap.get(id) ?? null;
+      const prCorrs = db.prepare(
+        `SELECT target_id, metadata_json FROM correlations WHERE session_id = ? AND correlation_type = 'pr-outcome'`
+      ).all(id) as { target_id: string; metadata_json: string | null }[];
+      const prs = prCorrs.map(c => {
+        const m = JSON.parse(c.metadata_json ?? '{}') as {
+          prNumber: number; state: 'merged' | 'closed' | 'open'; title: string; url: string;
+          mergedAt: string | null; closedAt: string | null; reverted: boolean;
+        };
+        return { prNumber: m.prNumber, state: m.state, title: m.title, url: m.url, mergedAt: m.mergedAt ?? null, closedAt: m.closedAt ?? null, reverted: m.reverted };
+      });
       return {
         id: session.id as string,
         sourceToolId: session.source_tool_id as string,
@@ -385,6 +419,8 @@ export function registerRoutes(app: FastifyInstance, opts: ServerOptions): void 
               computedAt: pq.computedAt,
             }
           : undefined,
+        shipStatus,
+        prs,
       };
     } finally { storage.close(); }
   });

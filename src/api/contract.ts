@@ -9,6 +9,9 @@
 // Shared primitives
 // ---------------------------------------------------------------------------
 
+import type { ShipStatus } from '../correlation/ship-status.js';
+export type { ShipStatus };
+
 export type ErrorResponse = { error: string };
 
 export interface ScoreDimensionContract {
@@ -57,6 +60,15 @@ export interface AvailableToolsResponse {
 // GET /api/overview
 // ---------------------------------------------------------------------------
 
+export interface ShipStatusBreakdown {
+  shipped: number;
+  reverted: number;
+  abandoned: number;
+  inFlight: number;
+  unlinked: number;
+  noPrData: number;
+}
+
 export interface OverviewResponse {
   totalSessions: number;
   /** Array of source_tool_id strings present in the filtered session set. */
@@ -66,6 +78,7 @@ export interface OverviewResponse {
   score: ScoreContract;
   empty: boolean;
   message?: string;
+  shipStatusBreakdown: ShipStatusBreakdown;
 }
 
 // ---------------------------------------------------------------------------
@@ -88,6 +101,7 @@ export interface TimelineSessionItem {
   outcomeLabels: string[];
   hasOutcome: boolean;
   reworkCount: number;
+  shipStatus: ShipStatus | null;
 }
 
 export interface TimelineResponse {
@@ -162,6 +176,16 @@ export interface OutcomeItem {
   note: string | null;
 }
 
+export interface SessionPrItem {
+  prNumber: number;
+  state: 'merged' | 'closed' | 'open';
+  title: string;
+  url: string;
+  mergedAt: string | null;
+  closedAt: string | null;
+  reverted: boolean;
+}
+
 export interface SessionDetailResponse {
   id: string;
   sourceToolId: string;
@@ -181,6 +205,8 @@ export interface SessionDetailResponse {
   outcomes: OutcomeItem[];
   uncorrelated: boolean;
   promptQuality?: PromptQualityContract;
+  shipStatus: ShipStatus | null;
+  prs: SessionPrItem[];
 }
 
 // ---------------------------------------------------------------------------
