@@ -41,6 +41,10 @@ Dashboard opens at `http://127.0.0.1:43187`. Ctrl+C when done.
   <br><em>Session detail — drill into tokens, cost, correlated commits, and outcomes</em>
 </p>
 
+- **Code impact** -- `cet diff <session-id>` shows actual diffs from linked commits
+- **Ship rate** -- `cet sync --pr` links commits to GitHub PRs (shipped/reverted/abandoned/in-flight)
+- **Prompt quality** -- `cet prompt-quality` scores prompts and shows a Prompting dashboard page
+
 ---
 
 ## Table of Contents
@@ -51,11 +55,11 @@ Dashboard opens at `http://127.0.0.1:43187`. Ctrl+C when done.
 - [Quick Start](#quick-start)
   - [One-Command Setup (Recommended)](#1-one-command-setup-recommended)
   - [Initialize](#2-initialize)
-  - [Import Fixture Data](#3-import-fixture-data)
-  - [Import from a Tool](#4-import-from-a-tool)
-  - [Sync with Git](#5-sync-with-git)
+  - [Import Sessions](#3-import-sessions)
+  - [Sync with Git](#4-sync-with-git)
+  - [Track Test Outcomes](#5-track-test-outcomes)
   - [Annotate Sessions](#6-annotate-sessions)
-  - [Generate a Report](#7-generate-a-report)
+  - [Inspect Code Impact & Prompt Quality](#7-inspect-code-impact--prompt-quality)
   - [Start the Dashboard](#8-start-the-dashboard)
 - [CLI Command Reference](#cli-command-reference)
 - [Dashboard, API, and Exports](#dashboard-api-and-exports)
@@ -76,13 +80,20 @@ Coding Effectiveness Tracker stores data on your machine and runs the dashboard/
 
 ## Install, Build, and Test
 
-> **Note:** This package is not yet published on npm. Install from the local repository.
-> The CI status badge above renders "no status" until the repository is pushed to GitHub and the `ci.yml` workflow has run at least once on the default branch.
+```powershell
+# Install from npm
+npm install -g coding-effectiveness-tracker
+
+# Or install in a project
+npm install coding-effectiveness-tracker
+```
+
+For local development, build from source:
 
 ```powershell
-npm install
-npm run build
-npm test
+git clone https://github.com/maliktafheem/coding-effectiveness-tracker
+cd coding-effectiveness-tracker
+npm install && npm run build && npm test
 ```
 
 During development, run the CLI directly with:
@@ -129,17 +140,9 @@ Initialize the local workspace and SQLite database:
 cet init
 ```
 
-### 3. Import Fixture Data
+### 3. Import Sessions
 
-Try the tool with bundled sample data:
-
-```powershell
-cet import --fixture tests/fixtures/sessions-fixture.json
-```
-
-### 4. Import from a Tool
-
-Import sessions from a supported local AI coding tool:
+Import from a supported local AI coding tool:
 
 ```powershell
 cet import --tool claude-code --discover
@@ -147,13 +150,36 @@ cet import --tool claude-code --discover
 
 Supported tools: `claude-code`, `codex`, `opencode`, `cursor`, `factory-droid`.
 
-### 5. Sync with Git
+Or try the tool with bundled sample data:
+
+```powershell
+cet import --fixture tests/fixtures/sessions-fixture.json
+```
+
+### 4. Sync with Git
 
 Correlate sessions with a local Git repository:
 
 ```powershell
 cet sync --repo C:\path\to\repo
 ```
+
+To also fetch GitHub PR outcomes (requires `gh` CLI):
+
+```powershell
+cet sync --repo C:\path\to\repo --pr
+```
+
+### 5. Track Test Outcomes
+
+Run a test command and capture the result:
+
+```powershell
+cet test -- npm test
+cet test -- pytest tests/
+```
+
+macOS / Linux users: same commands, invoke from your shell.
 
 ### 6. Annotate Sessions
 
@@ -163,38 +189,21 @@ Add a manual outcome annotation:
 cet annotate --session <session-id> --outcome shipped --score 1 --note "Merged with tests passing"
 ```
 
-### 7. Track Test Outcomes
+### 7. Inspect Code Impact & Prompt Quality
 
-Run a test command and capture the result:
-
-```powershell
-cet test -- npm test
-cet test -- pytest tests/
-```
-```bash
-# macOS / Linux
-cet test -- pytest tests/
-cet test -- npm test
-```
-
-### 8. Compare Tools, Sessions, or Periods
-
-Compare effectiveness across different dimensions:
+Show git diff of commits linked to a session:
 
 ```powershell
-cet compare --tool claude-code vs codex
-cet compare --from 2025-01-01 --to 2025-01-31 vs 2025-02-01 --to 2025-02-28
+cet diff <session-id>
 ```
 
-### 9. Generate a Report
-
-Generate an effectiveness report:
+Score prompt quality for sessions:
 
 ```powershell
-cet report
+cet prompt-quality
 ```
 
-### 10. Start the Dashboard
+### 8. Start the Dashboard
 
 Start the local dashboard and API server:
 
@@ -209,20 +218,19 @@ cet serve
 | `cet setup [--no-serve] [--interactive]` | One-command onboarding: init, discover AI tools, import sessions, sync git, start dashboard. |
 | `cet init [--data-dir <path>] [--force]` | Initialize the local tracker workspace and database. |
 | `cet import [--tool <id>] [--source <path>] [--fixture <path>] [--discover] [--dry-run] [--verbose]` | Import AI coding sessions from Codex, OpenCode, Claude Code, Cursor, or Factory Droid. |
-| `cet sync --repo <path> [--project <id>]` | Read local Git commits and correlate them with imported sessions. |
+| `cet sync --repo <path> [--project <id>] [--pr]` | Read local Git commits and correlate them with imported sessions. With `--pr`, also fetch GitHub PR outcomes via `gh` CLI. |
+| `cet diff <session-id>` | Show git diff of commits linked to a session. |
 | `cet test -- <command>` | Run a user command and capture pass/fail outcome and exit code. |
 | `cet test-outcome [--outcome-json <path>] [--command <str>] [--passed <n>] [--failed <n>] [--skipped <n>] [--duration <ms>]` | Ingest local test result artifacts or command outcome records. |
 | `cet compare [--tool <id>] [--from <date>] [--to <date>] vs [--tool <id>] [--from <date>] [--to <date>]` | Compare sessions, tools, or time periods. |
 | `cet trends [--project <id>]` | Show weekly trend analytics with rolling averages. |
 | `cet tag --session <id> [--tags <tags>] [--remove] [--list]` | Add, remove, or list tags on a session for filtering. |
 | `cet annotate --session <id> [--outcome <label>] [--score <number>] [--note <text>] [--tags <tags>]` | Record a manual outcome annotation for a session. |
+| `cet prompt-quality` | Score prompt quality for sessions. |
 | `cet report [--json] [--tool <id>] [--project <id>] [--from <date>] [--to <date>]` | Generate an effectiveness report from imported data. |
 | `cet serve [--port <port>]` | Start the local dashboard and API server on `127.0.0.1`; default port is `43187`. |
 | `cet export --output <path> [--format json\|markdown] [--overwrite] [--tool <id>] [--project <id>] [--from <date>] [--to <date>]` | Export an effectiveness report to a local file. |
 | `cet watch [--interval <min>] [--stop] [--status]` | Background daemon that polls for new AI sessions and git changes. Start, stop, or check status. |
-| `cet diff <session-id>` | Show git diff of commits linked to a session. |
-| `cet prompt-quality` | Score prompt quality for sessions. |
-| `cet sync --pr` | Fetch GitHub PR outcomes (requires `gh` CLI). |
 
 Most commands also accept `--data-dir <path>` to use a custom tracker data directory.
 
