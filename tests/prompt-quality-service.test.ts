@@ -101,6 +101,7 @@ describe('prompt-quality service', () => {
     await computeSingle(storage, 's1');
 
     const summary = await computeAll(storage);
+    expect(summary.skipped).toBe(1); // s1 was cached
     expect(summary.computed).toBe(1); // only s2
 
     const all = storage.db.prepare("SELECT COUNT(*) as c FROM sessions WHERE prompt_quality_json IS NOT NULL").get() as { c: number };

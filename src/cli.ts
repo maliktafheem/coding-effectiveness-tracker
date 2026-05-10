@@ -13,6 +13,7 @@ import { handleExport } from './commands/export.js';
 import { handleWatch } from './commands/watch.js';
 import { handleTag } from './commands/tag.js';
 import { handleDiff } from './commands/diff.js';
+import { handlePromptQuality } from './commands/prompt-quality.js';
 
 // Ensure all importers are registered
 import './importers/index.js';
@@ -104,6 +105,17 @@ program
   .option('--files', 'List changed files only')
   .option('--no-cache', 'Bypass cache and live-fetch from git')
   .action(handleDiff);
+
+program
+  .command('prompt-quality')
+  .description('Score prompt quality for sessions using heuristic analysis')
+  .option('-d, --data-dir <path>', 'Custom data directory path')
+  .option('--session <id>', 'Show detail for a single session')
+  .option('--recompute', 'Force recompute all (ignore cache)')
+  .option('--top <n>', 'Show top N best prompts')
+  .option('--worst <n>', 'Show worst N prompts')
+  .option('--analyzer <id>', 'Analyzer id (default: heuristic-v1)')
+  .action(handlePromptQuality);
 
 program
   .command('test')

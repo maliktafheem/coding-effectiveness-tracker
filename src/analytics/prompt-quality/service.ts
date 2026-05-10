@@ -90,16 +90,23 @@ export async function computeAll(
 ): Promise<ComputeSummary> {
   const db = storage.db;
 
+  // Pre-count already-cached sessions (skipped) before computing
+  let skipped = 0;
+  if (!opts.recompute) {
+    const cached = db
+      .prepare('SELECT COUNT(*) AS cnt FROM sessions WHERE prompt_quality_json IS NOT NULL')
+      .get() as { cnt: number };
+    skipped = cached.cnt;
+  }
+
   const rows = opts.recompute
     ? (db.prepare('SELECT id FROM sessions').all() as { id: string }[])
     : (db.prepare('SELECT id FROM sessions WHERE prompt_quality_json IS NULL').all() as { id: string }[]);
 
   let computed = 0;
-  let skipped = 0;
   for (const { id } of rows) {
-    const result = await computeSingle(storage, id, opts);
-    if (result) computed++;
-    else skipped++;
+    await computeSingle(storage, id, opts);
+    computed++;
   }
 
   return { computed, skipped };
