@@ -4,8 +4,9 @@
  * TDD order per spec:
  *   A – 3 sessions, one reworkCount=2, one reworkCount=0, one no metadata → ratio 1/3 → score 2/3
  *   B – 3 sessions, all valid metadata, no reworkCount → available: true, value 1
- *   C – 3 sessions, two malformed metadata_json, one valid with no rework → available: false (NEW)
- *   D – mixed: one malformed, two valid with reworkCount=1 → score from valid subset, note in explanation
+ *   C – all malformed: 3 sessions with unparseable metadata → available: false
+ *   C-mixed – 2 malformed + 1 valid with no rework → available: true, explanation notes unparseable count
+ *   D – 1 malformed, 2 valid with reworkCount=1 → score from denominator = all sessions, note in explanation
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
@@ -94,7 +95,7 @@ describe('rework-indicator: Test B – all valid metadata, no reworkCount', () =
 
 // ─── Test C ───────────────────────────────────────────────────────────────────
 
-describe('rework-indicator: Test C – two malformed metadata, one valid with no rework', () => {
+describe('rework-indicator: Test C – all malformed metadata', () => {
   let tempDir: string;
   let storage: Storage;
 
@@ -104,10 +105,10 @@ describe('rework-indicator: Test C – two malformed metadata, one valid with no
   });
   afterEach(() => { storage?.close(); safeCleanup(tempDir); });
 
-  it('available: false with explanation mentioning unparseable metadata (NEW behavior)', () => {
+  it('available: false when every session has unparseable metadata', () => {
     insertSession(storage, 'c-1', '{not valid json{{');
     insertSession(storage, 'c-2', 'also bad');
-    insertSession(storage, 'c-3', JSON.stringify({ someField: 1 })); // valid, no reworkCount
+    insertSession(storage, 'c-3', 'still bad }}}');
 
     const score = computeEffectivenessScore(storage, { projectId: 'rework-project' });
     const dim = score.dimensions.find(d => d.name === 'rework-indicator');
@@ -115,6 +116,35 @@ describe('rework-indicator: Test C – two malformed metadata, one valid with no
     expect(dim).toBeDefined();
     expect(dim!.available).toBe(false);
     expect(dim!.explanation).toMatch(/unparseable metadata/i);
+  });
+});
+
+// ─── Test C-mixed ─────────────────────────────────────────────────────────────
+
+describe('rework-indicator: Test C-mixed – two malformed, one valid with no rework', () => {
+  let tempDir: string;
+  let storage: Storage;
+
+  beforeEach(() => {
+    tempDir = mkdtempSync(join(tmpdir(), 'cet-rework-c-mixed-'));
+    storage = createTestStorage(tempDir);
+  });
+  afterEach(() => { storage?.close(); safeCleanup(tempDir); });
+
+  it('available: true, value 1, explanation notes unparseable count', () => {
+    insertSession(storage, 'cm-1', '{not valid json{{');
+    insertSession(storage, 'cm-2', 'also bad');
+    insertSession(storage, 'cm-3', JSON.stringify({ someField: 1 })); // valid, no reworkCount
+
+    const score = computeEffectivenessScore(storage, { projectId: 'rework-project' });
+    const dim = score.dimensions.find(d => d.name === 'rework-indicator');
+
+    expect(dim).toBeDefined();
+    expect(dim!.available).toBe(true);
+    // No rework observed anywhere → score is 1 (no rework indicator)
+    expect(dim!.value).toBe(1);
+    // Must still surface how many sessions had unparseable metadata
+    expect(dim!.explanation).toMatch(/2 session\(s\) had unparseable metadata/i);
   });
 });
 
@@ -130,7 +160,7 @@ describe('rework-indicator: Test D – one malformed, two valid with reworkCount
   });
   afterEach(() => { storage?.close(); safeCleanup(tempDir); });
 
-  it('score reflects valid subset, explanation notes unparseable count', () => {
+  it('score reflects rework across all sessions, explanation notes unparseable count', () => {
     insertSession(storage, 'd-1', '{bad json');
     insertSession(storage, 'd-2', JSON.stringify({ reworkCount: 1 }));
     insertSession(storage, 'd-3', JSON.stringify({ reworkCount: 1 }));

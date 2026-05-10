@@ -440,13 +440,16 @@ function computeReworkDimension(
   const totalRework = row.total_rework ?? 0;
   const invalidJsonCount = row.invalid_json_count ?? 0;
 
-  // All-malformed case: no valid rework signal at all — do not silently score 1.
-  if (invalidJsonCount > 0 && sessionsWithRework === 0 && totalRework === 0) {
+  // All-malformed case: every session has unparseable metadata — no rework
+  // signal can be derived, so report the dimension as unavailable. A mixed
+  // batch (some malformed, some valid) still yields a usable signal from
+  // the valid subset; we just surface the malformed count in the explanation.
+  if (invalidJsonCount > 0 && invalidJsonCount === sessions.length) {
     return {
       name: 'rework-indicator',
       value: 1,
       weight: weights['rework-indicator'],
-      explanation: 'Some session metadata could not be parsed (unparseable metadata); rework signal unavailable.',
+      explanation: `All ${invalidJsonCount} session(s) had unparseable metadata; rework signal unavailable.`,
       available: false,
     };
   }
