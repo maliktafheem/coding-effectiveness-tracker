@@ -330,19 +330,20 @@ function computeManualOutcomeDimension(
     return { name: 'manual-outcome', value: 0, weight: weights['manual-outcome'], explanation: 'No sessions available.', available: false };
   }
 
-  let totalScore = 0;
-  let count = 0;
-  for (const s of sessions) {
-    const outcomes = db.prepare(
-      "SELECT * FROM outcomes WHERE session_id = ? AND outcome_type = 'manual'",
-    ).all(s.id) as Record<string, unknown>[];
-    for (const o of outcomes) {
-      if (typeof o.score === 'number') {
-        totalScore += o.score;
-        count++;
-      }
-    }
-  }
+  // Single aggregate query using SQLite JSON1 — avoids N+1 per-session SELECTs.
+  // Passes session IDs as a JSON array so we are not bound by SQLite's
+  // 999-parameter IN limit for large session sets.
+  const sessionIds = sessions.map(s => s.id as string);
+  const row = db.prepare(
+    "SELECT COALESCE(SUM(score), 0) AS total_score, COUNT(score) AS cnt " +
+    "FROM outcomes " +
+    "WHERE session_id IN (SELECT value FROM json_each(?)) " +
+    "AND outcome_type = 'manual' " +
+    "AND score IS NOT NULL"
+  ).get(JSON.stringify(sessionIds)) as { total_score: number | null; cnt: number | null };
+
+  const totalScore = row.total_score ?? 0;
+  const count = row.cnt ?? 0;
 
   if (count === 0) {
     return { name: 'manual-outcome', value: 0, weight: weights['manual-outcome'], explanation: 'No manual outcome annotations recorded.', available: false };
