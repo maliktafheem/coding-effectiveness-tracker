@@ -211,6 +211,28 @@ describe('Storage', () => {
   });
 });
 
+describe('foreign_keys enforcement', () => {
+  let dir: string;
+  let storage: Storage;
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'cet-fk-'));
+    storage = Storage.open({ dataDir: dir });
+  });
+  afterEach(() => {
+    storage.close();
+    safeCleanup(dir);
+  });
+
+  it('enforces FK on session_diffs.session_id', () => {
+    expect(() => {
+      storage.db.prepare(
+        `INSERT INTO session_diffs (id, session_id, commit_hash, stats_json, cached_at, size_bytes)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+      ).run('d1', 'nonexistent-session', 'abc', '{}', 0, 0);
+    }).toThrow(/FOREIGN KEY/);
+  });
+});
+
 describe('migration 002_v02_features', () => {
   let dir: string;
   let storage: Storage;
@@ -247,5 +269,29 @@ describe('migration 002_v02_features', () => {
       .prepare('SELECT name FROM _migrations ORDER BY id')
       .all() as { name: string }[];
     expect(names.map((n) => n.name)).toContain('002_v02_features');
+  });
+});
+
+describe('migration idempotency', () => {
+  let dir: string;
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'cet-idem-'));
+  });
+  afterEach(() => {
+    safeCleanup(dir);
+  });
+
+  it('skips already-applied migrations on re-open', () => {
+    const s1 = Storage.open({ dataDir: dir });
+    const countBefore = (s1.db.prepare('SELECT COUNT(*) as c FROM _migrations').get() as { c: number }).c;
+    s1.close();
+
+    const s2 = Storage.open({ dataDir: dir });
+    try {
+      const countAfter = (s2.db.prepare('SELECT COUNT(*) as c FROM _migrations').get() as { c: number }).c;
+      expect(countAfter).toBe(countBefore);
+    } finally {
+      s2.close();
+    }
   });
 });

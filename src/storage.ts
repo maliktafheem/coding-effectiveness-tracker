@@ -40,6 +40,7 @@ export class Storage {
     // but fail on the first pragma or integrity check.
     try {
       db.pragma('journal_mode = WAL');
+      db.pragma('foreign_keys = ON');
       db.pragma('busy_timeout = 5000');
     } catch (err) {
       try { db.close(); } catch { /* ignore */ }
