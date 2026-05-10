@@ -22,8 +22,10 @@ import type {
   AnnotationCreateResponse,
   AnnotationPatchResponse,
   JsonExportResponse,
+  PromptQualityResponse,
 } from './contract.js';
 import { getSessionDiffs } from '../analytics/diff-service.js';
+import { getAllResults, getResult } from '../analytics/prompt-quality/service.js';
 
 const VALID_OUTCOMES = new Set([
   'good','accepted','merged','shipped','ok','neutral','partial',
@@ -335,6 +337,7 @@ export function registerRoutes(app: FastifyInstance, opts: ServerOptions): void 
       const db = storage.db;
       const session = db.prepare('SELECT * FROM sessions WHERE id = ?').get(id) as Record<string, unknown> | undefined;
       if (!session) return reply.code(404).send({ error: 'Session not found' });
+      const pq = getResult(storage, id);
       const correlations = (db.prepare('SELECT * FROM correlations WHERE session_id = ?').all(id) as Record<string, unknown>[]).map(c => ({
         id: c.id as string,
         type: c.correlation_type as string,
@@ -373,6 +376,15 @@ export function registerRoutes(app: FastifyInstance, opts: ServerOptions): void 
         costEstimate: (session.cost_estimate as number | null) ?? null,
         metadata: sessionMetadata, reworkCount,
         correlations, outcomes, uncorrelated: correlations.length === 0,
+        promptQuality: pq
+          ? {
+              overall: pq.overall,
+              signals: pq.signals,
+              analyzerId: pq.analyzerId,
+              analyzerVersion: pq.analyzerVersion,
+              computedAt: pq.computedAt,
+            }
+          : undefined,
       };
     } finally { storage.close(); }
   });
@@ -404,6 +416,20 @@ export function registerRoutes(app: FastifyInstance, opts: ServerOptions): void 
         refresh: refresh === '1' || refresh === 'true',
       });
       return { commits };
+    } finally { storage.close(); }
+  });
+
+  app.get('/api/prompt-quality', async (_request, reply): Promise<PromptQualityResponse | ErrorResponse> => {
+    if (!isInitialized(dataDir)) return reply.code(503).send({ error: 'Not initialized' });
+    const storage = Storage.open({ dataDir });
+    try {
+      const results = getAllResults(storage);
+      const avg = results.length === 0 ? 0 : results.reduce((a, r) => a + r.overall, 0) / results.length;
+      return {
+        sessions: results,
+        avgOverall: avg,
+        analyzer: results[0]?.analyzerId ?? 'heuristic-v1',
+      };
     } finally { storage.close(); }
   });
 

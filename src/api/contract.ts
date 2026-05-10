@@ -180,6 +180,7 @@ export interface SessionDetailResponse {
   correlations: CorrelationItem[];
   outcomes: OutcomeItem[];
   uncorrelated: boolean;
+  promptQuality?: PromptQualityContract;
 }
 
 // ---------------------------------------------------------------------------
@@ -228,6 +229,35 @@ export interface AnnotationPatchResponse {
   outcome: string;
   score: number | null;
   note: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// GET /api/prompt-quality
+// ---------------------------------------------------------------------------
+
+export interface PromptQualitySessionItem {
+  sessionId: string;
+  toolId: string;
+  startedAt: string | null;
+  overall: number;
+  signals: Record<string, number>;
+  analyzerId: string;
+  analyzerVersion: string;
+  computedAt: string;
+}
+
+export interface PromptQualityResponse {
+  sessions: PromptQualitySessionItem[];
+  avgOverall: number;
+  analyzer: string;
+}
+
+export interface PromptQualityContract {
+  overall: number;
+  signals: Record<string, number>;
+  analyzerId: string;
+  analyzerVersion: string;
+  computedAt: string;
 }
 
 // ---------------------------------------------------------------------------
