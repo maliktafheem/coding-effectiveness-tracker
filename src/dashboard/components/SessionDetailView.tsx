@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useFetch } from './useFetch';
 import AnnotationForm from './AnnotationForm';
+import DiffPanel from './DiffPanel';
 import type { SessionDetail, OverviewData } from './types';
 
 const API_BASE = window.location.origin;
@@ -117,6 +118,8 @@ export default function SessionDetailView({ sessionId, onBack }: { sessionId: st
           </table>
         )}
       </div>
+
+      <DiffPanel sessionId={sessionId} />
 
       <div className="card">
         <h2>Annotations</h2>

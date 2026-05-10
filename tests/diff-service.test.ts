@@ -8,7 +8,6 @@ import { ensureDataDir } from '../src/config.js';
 import {
   getSessionDiffs,
   DIFF_SIZE_CAP_BYTES,
-  type SessionCommitDiff,
 } from '../src/analytics/diff-service.js';
 import { randomUUID } from 'node:crypto';
 

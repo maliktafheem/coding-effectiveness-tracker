@@ -183,6 +183,29 @@ export interface SessionDetailResponse {
 }
 
 // ---------------------------------------------------------------------------
+// GET /api/sessions/:id/diff
+// ---------------------------------------------------------------------------
+
+export interface DiffStatsContract {
+  files: number;
+  insertions: number;
+  deletions: number;
+}
+
+export interface CommitDiffItem {
+  hash: string;
+  shortHash: string;
+  message: string | null;
+  stats: DiffStatsContract;
+  diff?: string;
+  skipped?: 'too-large' | 'repo-missing';
+}
+
+export interface SessionDiffResponse {
+  commits: CommitDiffItem[];
+}
+
+// ---------------------------------------------------------------------------
 // POST /api/sessions/:id/annotations
 // ---------------------------------------------------------------------------
 

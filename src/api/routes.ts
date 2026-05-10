@@ -18,10 +18,12 @@ import type {
   ProjectsResponse,
   TrendsResponse,
   SessionDetailResponse,
+  SessionDiffResponse,
   AnnotationCreateResponse,
   AnnotationPatchResponse,
   JsonExportResponse,
 } from './contract.js';
+import { getSessionDiffs } from '../analytics/diff-service.js';
 
 const VALID_OUTCOMES = new Set([
   'good','accepted','merged','shipped','ok','neutral','partial',
@@ -372,6 +374,36 @@ export function registerRoutes(app: FastifyInstance, opts: ServerOptions): void 
         metadata: sessionMetadata, reworkCount,
         correlations, outcomes, uncorrelated: correlations.length === 0,
       };
+    } finally { storage.close(); }
+  });
+
+  app.get('/api/sessions/:id/diff', async (request, reply): Promise<SessionDiffResponse | ErrorResponse> => {
+    const { id } = request.params as { id: string };
+    const { repo, refresh } = request.query as { repo?: string; refresh?: string };
+    if (!isInitialized(dataDir)) return reply.code(503).send({ error: 'Not initialized' });
+    const storage = Storage.open({ dataDir });
+    try {
+      const session = storage.db
+        .prepare('SELECT id, metadata_json FROM sessions WHERE id = ?')
+        .get(id) as { id: string; metadata_json: string | null } | undefined;
+      if (!session) return reply.code(404).send({ error: 'Session not found' });
+
+      let repoPath = repo;
+      if (!repoPath && session.metadata_json) {
+        try {
+          const parsed = JSON.parse(session.metadata_json) as { projectPath?: string };
+          repoPath = parsed.projectPath;
+        } catch { /* ignore */ }
+      }
+      if (!repoPath) {
+        return reply.code(400).send({ error: 'Repo path required; pass ?repo=<path>' });
+      }
+
+      const commits = getSessionDiffs(storage.db, id, {
+        repoPath,
+        refresh: refresh === '1' || refresh === 'true',
+      });
+      return { commits };
     } finally { storage.close(); }
   });
 
