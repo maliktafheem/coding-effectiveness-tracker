@@ -26,8 +26,16 @@ export default class MyToolImporter {
   }
 
   parse({ sourcePath }) {
-    // Return { sessions: [...], errors: [...], warnings: [...] }
-    return { sessions: [], errors: [], warnings: [] };
+    // Return ImportResult: { sourceToolId, sourcePath, imported, skipped, errors, errorDetails, sessions }
+    return {
+      sourceToolId: 'my-tool',
+      sourcePath,
+      imported: 0,
+      skipped: 0,
+      errors: 0,
+      errorDetails: [],
+      sessions: [],
+    };
   }
 }
 ```
@@ -68,7 +76,7 @@ export default class MyImporter {
   get displayName() { return 'My AI Tool'; }
   canHandle(path) { return path.endsWith('.mytool'); }
   parse({ sourcePath }) {
-    return { sessions: [], errors: [], warnings: [] };
+    return { sourceToolId: 'my-tool', sourcePath, imported: 0, skipped: 0, errors: 0, errorDetails: [], sessions: [] };
   }
 }
 EOF

@@ -16,7 +16,8 @@ All timestamps are ISO 8601 strings stored as TEXT.
 | 6 | `test_outcomes` | Test result records |
 | 7 | `outcomes` | Manual outcome annotations |
 | 8 | `correlations` | Correlation records (session ↔ signal) |
-| 9 | `_migrations` | Migration tracking (internal) |
+| 9 | `session_diffs` | Cached git diff text for session-linked commits |
+| 10 | `_migrations` | Migration tracking (internal) |
 
 ---
 
@@ -70,6 +71,7 @@ The main entity representing an AI coding session. Each session is imported from
 | `tokens_output` | INTEGER | — | Output token count |
 | `cost_estimate` | REAL | — | Estimated cost in USD |
 | `metadata_json` | TEXT | — | JSON blob (excluded from exports unless `raw=true`) |
+| `prompt_quality_json` | TEXT | — | JSON blob of per-session prompt-quality result (computed by `cet prompt-quality`) |
 | `created_at` | TEXT | NOT NULL, DEFAULT now | Creation timestamp |
 | `updated_at` | TEXT | NOT NULL, DEFAULT now | Last update timestamp |
 
@@ -193,7 +195,7 @@ Correlation records connecting sessions to git commits, test outcomes, and manua
 |--------|------|-------------|-------------|
 | `id` | TEXT | PRIMARY KEY | UUID |
 | `session_id` | TEXT | NOT NULL, FK → sessions(id) | Parent session |
-| `correlation_type` | TEXT | NOT NULL | Type: `git-commit`, `test-outcome`, or `manual-outcome` |
+| `correlation_type` | TEXT | NOT NULL | Type: `git-commit`, `test-outcome`, `manual-outcome`, or `pr-outcome` |
 | `target_id` | TEXT | NOT NULL | ID of the correlated entity |
 | `confidence` | REAL | NOT NULL, DEFAULT 0.0 | Confidence score 0–1 |
 | `metadata_json` | TEXT | — | JSON with `reasons` array explaining confidence |
@@ -222,6 +224,42 @@ Internal migration tracking table.
 
 ---
 
+## `session_diffs`
+
+Cached git diff text for commits linked to sessions. Populated by `cet diff` and `/api/sessions/:id/diff` on first access.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | TEXT | PRIMARY KEY | UUID |
+| `session_id` | TEXT | NOT NULL, FK → sessions(id) ON DELETE CASCADE | Parent session |
+| `commit_hash` | TEXT | NOT NULL | Full SHA of the git commit |
+| `diff_text` | TEXT | — | Raw diff output (may be NULL if too large or skipped) |
+| `stats_json` | TEXT | NOT NULL | JSON with `filesChanged`, `insertions`, `deletions` |
+| `cached_at` | INTEGER | NOT NULL | Unix timestamp of cache entry |
+| `size_bytes` | INTEGER | NOT NULL | Size of the diff in bytes |
+| `skipped_reason` | TEXT | — | Reason diff was skipped (e.g., "exceeds_10mb") |
+
+**Indexes:**
+
+| Index Name | Columns | Notes |
+|------------|---------|-------|
+| `idx_session_diffs_unique` | `session_id, commit_hash` | **UNIQUE** — prevents duplicate cache entries |
+| `idx_session_diffs_session` | `session_id` | Lookup diffs by session |
+
+---
+
+## Migrations
+
+The database schema is versioned via sequential migrations stored in `_migrations`.
+
+| # | Name | Changes |
+|---|------|---------|
+| 1 | `001_core_schema` | Initial schema: projects, tools, sessions, events, git_commits, test_outcomes, outcomes, correlations, _migrations |
+| 2 | `002_v02_features` | Adds `session_diffs` table for diff caching. Adds `prompt_quality_json` column to sessions. |
+| 3 | `003_session_diffs_cascade` | Rebuilds `session_diffs` with `ON DELETE CASCADE` on `session_id` foreign key. |
+
+---
+
 ## Entity Relationships
 
 ```
@@ -229,7 +267,9 @@ projects ──────┬──── sessions ────── events
                │         │
                │         ├──── outcomes
                │         │
-               │         ├──── correlations ──── (git_commits, test_outcomes, outcomes)
+               │         ├──── correlations ──── (git_commits, test_outcomes, outcomes, pr-outcomes)
+               │         │
+               │         └──── session_diffs
                │
 tools ─────────┘
 ```
@@ -237,6 +277,7 @@ tools ─────────┘
 - **sessions** belongs to **projects** and **tools**
 - **events** belongs to **sessions**
 - **outcomes** belongs to **sessions**
-- **correlations** belongs to **sessions** and polymorphically references git_commits, test_outcomes, or outcomes via `target_id` + `correlation_type`
+- **correlations** belongs to **sessions** and polymorphically references git_commits, test_outcomes, outcomes, or pr-outcomes via `target_id` + `correlation_type`
+- **session_diffs** belongs to **sessions** (ON DELETE CASCADE)
 - **test_outcomes** optionally references **sessions**, **git_commits**, and **projects**
 - **git_commits** belongs to **projects**

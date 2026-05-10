@@ -163,7 +163,7 @@ The report output shows each dimension's **current weight** and explanation.
 
 ---
 
-## Ship rate (opt-in, v0.2)
+## Ship Rate (opt-in, v0.2)
 
 Session-level ship status is derived from correlations with GitHub PRs.
 

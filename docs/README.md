@@ -8,11 +8,13 @@ This directory contains the reference documentation for the Coding Effectiveness
 |------|--------|
 | [architecture.md](architecture.md) | System components, data flow, dependency graph, key design patterns |
 | [development.md](development.md) | Prerequisites, build/test, project structure, cross-platform notes |
-| [cli-reference.md](cli-reference.md) | All 8 CLI commands with options, flags, and usage examples |
-| [api-reference.md](api-reference.md) | All 10 API endpoints with query parameters and response shapes |
+| [cli-reference.md](cli-reference.md) | All 15 CLI commands with options, flags, and usage examples |
+| [api-reference.md](api-reference.md) | All 14 API endpoints with query parameters and response shapes |
 | [data-model.md](data-model.md) | All 10 database tables, columns, indexes, and relationships |
+| [scoring.md](scoring.md) | Effectiveness dimensions, weights, thresholds, ship rate, prompt quality |
 | [importer-guide.md](importer-guide.md) | ToolImporter interface, canHandle/parse, registration, privacy, path safety |
 | [privacy.md](privacy.md) | Local-first architecture, no telemetry, loopback-only, redaction pipeline, canary testing |
+| [plugins.md](plugins.md) | Custom importer plugins: location, format, required methods, loading |
 
 ## Quick Links
 

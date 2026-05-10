@@ -56,6 +56,14 @@ coding-effectiveness-tracker/
 │   │   ├── server.ts             # Fastify server creation
 │   │   ├── routes.ts             # All API route handlers
 │   │   └── export.ts             # JSON & Markdown export generators
+│   ├── analytics/
+│   │   ├── trends.ts             # Trend computation
+│   │   ├── diff-service.ts       # Git diff caching and retrieval
+│   │   └── prompt-quality/
+│   │       ├── types.ts          # PromptAnalyzer interface + result types
+│   │       ├── heuristic-v1.ts   # Heuristic-based prompt analyzer
+│   │       ├── registry.ts       # Analyzer registry
+│   │       └── service.ts        # Prompt quality scoring service
 │   ├── commands/
 │   │   ├── init.ts               # cet init handler
 │   │   ├── import.ts             # cet import handler
@@ -63,17 +71,25 @@ coding-effectiveness-tracker/
 │   │   ├── annotate.ts           # cet annotate handler
 │   │   ├── sync.ts               # cet sync handler
 │   │   ├── test-outcome.ts       # cet test-outcome handler
+│   │   ├── diff.ts               # cet diff handler
+│   │   ├── prompt-quality.ts     # cet prompt-quality handler
 │   │   ├── serve.ts              # cet serve handler
 │   │   └── export.ts             # cet export handler
 │   ├── collectors/
 │   │   ├── git.ts                # Local git commit collection
 │   │   └── test-outcomes.ts      # Test outcome ingestion
 │   ├── correlation/
-│   │   └── engine.ts             # Session correlation engine
+│   │   ├── engine.ts             # Session correlation engine
+│   │   ├── ship-status.ts        # Session-level ship status derivation
+│   │   └── pr-outcomes.ts        # GitHub PR outcome fetching
 │   ├── dashboard/
 │   │   ├── main.tsx              # React entry point
 │   │   └── components/
-│   │       └── App.tsx           # Dashboard SPA (monolithic)
+│   │       ├── App.tsx           # Dashboard SPA (monolithic)
+│   │       ├── DiffPanel.tsx     # Session diff display
+│   │       ├── PromptQualityPage.tsx  # Prompt quality dashboard page
+│   │       ├── ShipStatusPill.tsx # Ship status badge component
+│   │       └── PRCard.tsx        # PR detail card component
 │   ├── importers/
 │   │   ├── types.ts              # ToolImporter interface + types
 │   │   ├── registry.ts           # Importer registry + run logic
@@ -94,9 +110,27 @@ coding-effectiveness-tracker/
 │   ├── import.test.ts            # Import command tests
 │   ├── storage.test.ts           # Storage/database tests
 │   ├── api.test.ts               # API endpoint tests
+│   ├── api-diff.test.ts          # API diff endpoint tests
+│   ├── api-prompt-quality.test.ts # API prompt-quality endpoint tests
+│   ├── api-ship-status.test.ts   # API ship status endpoint tests
 │   ├── correlation.test.ts       # Correlation engine tests
 │   ├── sync-cli.test.ts          # Sync + test-outcome CLI tests
 │   ├── config.test.ts            # Config resolution tests
+│   ├── setup.test.ts             # Setup command tests
+│   ├── diff-service.test.ts      # Diff service tests
+│   ├── cli-diff.test.ts          # CLI diff command tests
+│   ├── cli-sync-pr.test.ts       # CLI sync --pr tests
+│   ├── prompt-quality-heuristic.test.ts  # Heuristic analyzer tests
+│   ├── prompt-quality-service.test.ts    # Prompt quality service tests
+│   ├── cli-prompt-quality.test.ts        # CLI prompt-quality tests
+│   ├── pr-outcomes.test.ts       # PR outcome fetching tests
+│   ├── ship-status.test.ts       # Ship status derivation tests
+│   ├── rework-dim.test.ts        # Rework dimension tests
+│   ├── scoring-perf.test.ts      # Scoring performance tests
+│   ├── manual-outcome-perf.test.ts # Manual outcome perf tests
+│   ├── trends.test.ts            # Trend computation tests
+│   ├── watch.test.ts             # Watch daemon tests
+│   ├── auto-init.test.ts         # Auto-init tests
 │   └── e2e.test.ts               # End-to-end workflow tests
 ├── docs/                         # Reference documentation
 ├── package.json

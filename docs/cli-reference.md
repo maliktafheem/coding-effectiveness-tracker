@@ -239,6 +239,7 @@ cet sync [options]
 | `-d, --data-dir <path>` | string | — | Custom data directory path |
 | `-r, --repo <path>` | string | **required** | Path to local Git repository |
 | `-p, --project <id>` | string | (repo dir name) | Project ID |
+| `--pr` | boolean | false | Also fetch GitHub PR outcomes (requires `gh` CLI authenticated) |
 
 **Behavior:**
 - Runs `git log --all` locally — NO remote fetch or API calls
@@ -246,6 +247,7 @@ cet sync [options]
 - Auto-derives project ID from repo directory name if not specified
 - Correlates stored commits with imported sessions via time-overlap confidence scoring
 - Creates project record in database if it doesn't exist
+- With `--pr`, fetches PR outcomes via `gh` CLI to determine ship status (shipped/reverted/abandoned/in-flight)
 
 **Examples:**
 ```bash
@@ -254,6 +256,9 @@ cet sync --repo ~/projects/my-app
 
 # Sync with explicit project ID
 cet sync --repo ~/projects/my-app --project my-app
+
+# Sync and fetch GitHub PR outcomes (requires gh CLI)
+cet sync --repo ~/projects/my-app --pr
 
 # Sync with custom data directory
 cet sync --data-dir ~/my-data --repo ~/projects/my-app
@@ -494,8 +499,104 @@ cet export --format markdown --output report.md --overwrite
 # Filtered export
 cet export --format json --output codex-report.json --tool codex --from 2025-01-01
 ```
+
 ---
 
+### `cet diff`
+
+Show git diff of commits linked to a session.
+
+```
+cet diff <session-id> [options]
+```
+
+**Options:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `-d, --data-dir <path>` | string | — | Custom data directory path |
+| `-r, --repo <path>` | string | — | Repo path (defaults to session metadata projectPath) |
+| `--commit <hash>` | string | — | Filter to single commit by hash/shortHash prefix |
+| `--stats` | boolean | false | Stats only (no diff text) |
+| `--files` | boolean | false | List changed files only |
+| `--no-cache` | boolean | false | Bypass cache and live-fetch from git |
+
+**Behavior:**
+- Reads commits correlated with session from database
+- Fetches git diff for each commit from local repo
+- Caches diff text in `session_diffs` table for fast re-display
+- Respects size caps: large diffs store `skipped_reason` instead of full text
+- With `--no-cache`, always live-fetches from git instead of reading cache
+
+**Examples:**
+```bash
+# Show all diffs for a session
+cet diff abc-123
+
+# Stats summary only
+cet diff abc-123 --stats
+
+# List changed files only
+cet diff abc-123 --files
+
+# Filter to specific commit
+cet diff abc-123 --commit a1b2c3d
+
+# Bypass cache
+cet diff abc-123 --no-cache --stats
+
+# Specify repo path
+cet diff abc-123 --repo ~/projects/my-app
+```
+
+---
+
+### `cet prompt-quality`
+
+Score prompt quality for sessions using heuristic analysis.
+
+```
+cet prompt-quality [options]
+```
+
+**Options:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `-d, --data-dir <path>` | string | — | Custom data directory path |
+| `--session <id>` | string | — | Show detail for a single session |
+| `--recompute` | boolean | false | Force recompute all (ignore cache) |
+| `--top <n>` | number | — | Show top N best prompts |
+| `--worst <n>` | number | — | Show worst N prompts |
+| `--analyzer <id>` | string | "heuristic-v1" | Analyzer id to use |
+
+**Behavior:**
+- Analyzes first user prompt in each session for quality signals
+- Signals: specificity (word count), iteration (assistant turns), hasCodeBlock, hasExample, hasConstraint
+- Stores result in `prompt_quality_json` column on sessions table
+- Shows per-session breakdown: overall score, individual signal values
+- Results cached; use `--recompute` to re-analyze
+
+**Examples:**
+```bash
+# Score all sessions
+cet prompt-quality
+
+# Show top 5 best prompts
+cet prompt-quality --top 5
+
+# Show 5 worst prompts
+cet prompt-quality --worst 5
+
+# Detail for a single session
+cet prompt-quality --session abc-123
+
+# Force recompute
+cet prompt-quality --recompute
+
+# Use specific analyzer
+cet prompt-quality --analyzer heuristic-v1
+```
 
 ---
 
@@ -532,7 +633,7 @@ cet test -- node -e "process.exit(1)"
 
 ### `cet compare`
 
-Compare sessions, tools, or time periods.
+Compare effectiveness between time periods, projects, or tools.
 
 ```
 cet compare [options]
@@ -543,47 +644,27 @@ cet compare [options]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `-d, --data-dir <path>` | string | — | Custom data directory path |
-| `--tool <id>` | string | — | Filter by source tool |
-| `-p, --project <id>` | string | — | Filter by project |
-| `--from <date>` | string | — | Start date filter (ISO date) |
-| `--to <date>` | string | — | End date filter (ISO date) |
+| `-p, --project <id>` | string | — | Filter by project id |
+| `-t, --tool <id>` | string | — | Filter by tool id |
+| `--period <mode>` | string | — | Compare by "tools", "projects", or default time periods |
+| `--from1 <date>` | string | — | Period 1 start date |
+| `--to1 <date>` | string | — | Period 1 end date |
+| `--from2 <date>` | string | — | Period 2 start date |
+| `--to2 <date>` | string | — | Period 2 end date |
 
 **Examples:**
 ```bash
 # Compare two tools
-cet compare --tool claude-code vs codex
+cet compare --period tools
 
 # Compare two time periods
-cet compare --from 2025-01-01 --to 2025-01-31 vs 2025-02-01 --to 2025-02-28
+cet compare --from1 2025-01-01 --to1 2025-01-31 --from2 2025-02-01 --to2 2025-02-28
 
-# Compare specific period
-cet compare --tool claude-code --from 2025-01-01 --to 2025-03-31
-```
+# Filter by project
+cet compare --project my-app
 
----
-
-### `cet trends`
-
-Show weekly trend analytics with rolling averages.
-
-```
-cet trends [options]
-```
-
-**Options:**
-
-| Flag | Type | Default | Description |
-|------|------|---------|-------------|
-| `-d, --data-dir <path>` | string | — | Custom data directory path |
-| `-p, --project <id>` | string | — | Filter by project |
-
-**Examples:**
-```bash
-# Weekly trends for all projects
-cet trends
-
-# Weekly trends for a specific project
-cet trends --project my-app
+# Filter by tool
+cet compare --tool claude-code --from1 2025-01-01 --to1 2025-03-31
 ```
 
 ---

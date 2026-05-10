@@ -13,8 +13,9 @@ All data stays on the user's machine. There is no cloud backend, no telemetry, a
 ```
 ┌────────────────────────────────────────────────────────────┐
 │                        CLI (commander)                      │
-│  init  import  sync  test-outcome  annotate  report  serve  │
-│                           export                            │
+│  setup  init  import  sync  diff  prompt-quality  test        │
+│  test-outcome  report  annotate  tag  compare  serve  export  │
+│  watch                                                        │
 └──────┬─────────────────────────────────────────────────────┘
        │
        ▼
@@ -31,8 +32,9 @@ All data stays on the user's machine. There is no cloud backend, no telemetry, a
        ▼
 ┌────────────────────────────────────────────────────────────┐
 │                     Storage (better-sqlite3)                │
-│  9 tables: projects, tools, sessions, events, git_commits,  │
-│  test_outcomes, outcomes, correlations, _migrations           │
+│  10 tables: projects, tools, sessions, events, git_commits,    │
+│  test_outcomes, outcomes, correlations, session_diffs,          │
+│  _migrations                                                    │
 └──────┬─────────────────────────────────────────────────────┘
        │
        ▼
@@ -55,12 +57,13 @@ All data stays on the user's machine. There is no cloud backend, no telemetry, a
        ▼
 ┌────────────────────────────────────────────────────────────┐
 │               API Server (Fastify · loopback only)          │
-│  12 endpoints: /health, /api/available-tools, /api/trends,  │
-│  /api/overview, /api/timeline, /api/tools, /api/projects,   │
-│  /api/sessions/:id,                                         │
-│  POST /api/sessions/:id/annotations,                        │
-│  PATCH /api/annotations/:id,                                │
-│  /api/export/json, /api/export/markdown                     │
+│  14 endpoints: /health, /api/available-tools, /api/trends,     │
+│  /api/overview, /api/timeline, /api/tools, /api/projects,      │
+│  /api/sessions/:id, /api/sessions/:id/diff,                    │
+│  /api/prompt-quality,                                           │
+│  POST /api/sessions/:id/annotations,                            │
+│  PATCH /api/annotations/:id,                                    │
+│  /api/export/json, /api/export/markdown                         │
 └──────┬─────────────────────────────────────────────────────┘
        │
        ▼

@@ -222,8 +222,7 @@ cet serve
 | `cet diff <session-id>` | Show git diff of commits linked to a session. |
 | `cet test -- <command>` | Run a user command and capture pass/fail outcome and exit code. |
 | `cet test-outcome [--outcome-json <path>] [--command <str>] [--passed <n>] [--failed <n>] [--skipped <n>] [--duration <ms>]` | Ingest local test result artifacts or command outcome records. |
-| `cet compare [--tool <id>] [--from <date>] [--to <date>] vs [--tool <id>] [--from <date>] [--to <date>]` | Compare sessions, tools, or time periods. |
-| `cet trends [--project <id>]` | Show weekly trend analytics with rolling averages. |
+| `cet compare [--tool <id>] [--project <id>] [--period <mode>] [--from1 <date>] [--to1 <date>] [--from2 <date>] [--to2 <date>]` | Compare sessions, tools, projects, or time periods. |
 | `cet tag --session <id> [--tags <tags>] [--remove] [--list]` | Add, remove, or list tags on a session for filtering. |
 | `cet annotate --session <id> [--outcome <label>] [--score <number>] [--note <text>] [--tags <tags>]` | Record a manual outcome annotation for a session. |
 | `cet prompt-quality` | Score prompt quality for sessions. |
