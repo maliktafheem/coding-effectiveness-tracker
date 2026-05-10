@@ -57,22 +57,43 @@ async function waitForHealth(url: string, maxMs: number): Promise<void> {
   throw new Error(`Dashboard did not become healthy at ${url} within ${maxMs}ms: ${msg}`);
 }
 
-function killServer(child: ChildProcessWithoutNullStreams): void {
+async function killServer(child: ChildProcessWithoutNullStreams): Promise<void> {
   if (child.killed || child.exitCode !== null) return;
   const pid = child.pid;
   if (pid == null) return;
 
   if (process.platform === 'win32') {
     // Kill whole process tree so the tsx child doesn't orphan the fastify proc.
+    const fallback = (): void => {
+      try { child.kill('SIGTERM'); } catch { /* best effort */ }
+    };
+
+    let killer;
     try {
-      const killer = spawn('taskkill', ['/PID', String(pid), '/T', '/F'], {
+      killer = spawn('taskkill', ['/PID', String(pid), '/T', '/F'], {
         stdio: 'ignore',
         shell: false,
       });
-      killer.on('error', () => { /* fall back below */ });
     } catch {
-      try { child.kill('SIGTERM'); } catch { /* best effort */ }
+      fallback();
+      return;
     }
+
+    await new Promise<void>((resolve) => {
+      let settled = false;
+      const settle = (): void => { if (!settled) { settled = true; resolve(); } };
+
+      killer.on('error', () => {
+        // taskkill binary missing or spawn-level failure — fall back.
+        fallback();
+        settle();
+      });
+      killer.on('exit', (code) => {
+        // Non-zero exit (e.g. process tree needs elevation) — fall back.
+        if (code !== 0) fallback();
+        settle();
+      });
+    });
     return;
   }
 
@@ -204,7 +225,7 @@ async function captureScreenshots(): Promise<void> {
     if (browser) {
       try { await browser.close(); } catch { /* ignore */ }
     }
-    killServer(child);
+    await killServer(child);
     // Give Windows a moment to release the port before returning.
     await sleep(300);
   }
