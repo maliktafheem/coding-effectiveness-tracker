@@ -394,11 +394,192 @@ async function main(): Promise<void> {
       correlateSession(storage, sid);
     }
 
+    // 8. Seed prompt_quality_json on ~80% of sessions.
+    const updateQuality = db.prepare(
+      'UPDATE sessions SET prompt_quality_json = ? WHERE id = ?',
+    );
+
+    function round2(v: number): number {
+      return Math.round(v * 100) / 100;
+    }
+
+    const qualityTx = db.transaction(() => {
+      for (let i = 0; i < sessionIds.length; i++) {
+        // Skip ~17% (every 6th session starting from idx 5) so ~83% get quality data.
+        if (i % 6 === 5) continue;
+
+        const rem = i % 10;
+        let overall: number;
+        const signals: Record<string, number> = {};
+
+        if (rem < 3) {
+          // good tier — 30% of quality-populated sessions
+          const base = (i * 37) % 100;
+          signals.specificity = round2(0.7 + (base % 16) / 100);
+          signals.iteration = round2(0.7 + ((base * 7) % 26) / 100);
+          signals.hasCodeBlock = 1;
+          signals.hasExample = i % 3 === 0 ? 1 : 0;
+          signals.hasConstraint = i % 2 === 0 ? 1 : 0;
+          overall = round2(0.65 + (base % 17) / 100);
+        } else if (rem < 8) {
+          // medium tier — 50% of quality-populated sessions
+          const base = (i * 53) % 100;
+          signals.specificity = round2(0.4 + (base % 26) / 100);
+          signals.iteration = round2(0.5 + (base % 26) / 100);
+          signals.hasCodeBlock = i % 3 === 0 ? 1 : 0;
+          signals.hasExample = 0;
+          signals.hasConstraint = i % 4 === 0 ? 1 : 0;
+          overall = round2(0.4 + (base % 22) / 100);
+        } else {
+          // weak tier — 20% of quality-populated sessions
+          const base = (i * 71) % 100;
+          signals.specificity = round2(0.1 + (base % 26) / 100);
+          signals.iteration = round2(0.2 + (base % 26) / 100);
+          signals.hasCodeBlock = 0;
+          signals.hasExample = 0;
+          signals.hasConstraint = 0;
+          overall = round2(0.15 + (base % 22) / 100);
+        }
+
+        const quality = JSON.stringify({
+          overall,
+          signals,
+          analyzerId: 'heuristic-v1',
+          analyzerVersion: '1.0.0',
+          computedAt: toSqliteTimestamp(seeds[i].startedAt),
+        });
+
+        updateQuality.run(quality, sessionIds[i]);
+      }
+    });
+    qualityTx();
+
+    // 9. Seed pr-outcome correlations for sessions with git commits.
+    // Sessions 0..16 (17 total) have git-commit correlations after correlateSession.
+    // Distribution: ~59% merged-not-reverted, 12% merged-reverted, 18% closed, 6% open, 6% no-PR.
+    const insertPrCorrelation = db.prepare(
+      `INSERT INTO correlations (id, session_id, correlation_type, target_id, confidence, metadata_json)
+       VALUES (?, ?, 'pr-outcome', ?, 1, ?)`,
+    );
+
+    const prTx = db.transaction(() => {
+      interface PrDef {
+        sessions: number[];
+        prNumber: number;
+        state: 'merged' | 'closed' | 'open';
+        reverted: boolean;
+        title: string;
+      }
+
+      const prDefs: PrDef[] = [
+        { sessions: [0, 1], prNumber: 100, state: 'merged', reverted: false, title: seeds[0].summary },
+        { sessions: [2, 3], prNumber: 101, state: 'merged', reverted: false, title: seeds[2].summary },
+        { sessions: [4, 5], prNumber: 102, state: 'merged', reverted: false, title: seeds[4].summary },
+        { sessions: [6], prNumber: 103, state: 'merged', reverted: false, title: seeds[6].summary },
+        { sessions: [7, 8], prNumber: 104, state: 'merged', reverted: false, title: seeds[7].summary },
+        { sessions: [9], prNumber: 105, state: 'merged', reverted: false, title: seeds[9].summary },
+        { sessions: [10], prNumber: 106, state: 'merged', reverted: true, title: seeds[10].summary },
+        { sessions: [11], prNumber: 107, state: 'merged', reverted: true, title: seeds[11].summary },
+        { sessions: [12, 13], prNumber: 108, state: 'closed', reverted: false, title: seeds[12].summary },
+        { sessions: [14], prNumber: 109, state: 'closed', reverted: false, title: seeds[14].summary },
+        { sessions: [15], prNumber: 110, state: 'open', reverted: false, title: seeds[15].summary },
+        // Session 16: intentionally no PR (null ship status)
+      ];
+
+      for (const def of prDefs) {
+        const firstSeed = seeds[def.sessions[0]];
+        const endedAt = new Date(firstSeed.startedAt.getTime() + firstSeed.durationMinutes * 60 * 1000);
+        const mergedOrClosedAt = new Date(endedAt.getTime() + (def.prNumber * 13) % 72 * 60 * 60 * 1000).toISOString();
+        const mergedAt = def.state === 'merged' ? mergedOrClosedAt : null;
+        const closedAt = def.state === 'closed' ? mergedOrClosedAt : null;
+
+        const metadata = {
+          prNumber: def.prNumber,
+          state: def.state,
+          title: def.title,
+          url: `https://github.com/demo/acme-api/pull/${def.prNumber}`,
+          mergedAt,
+          closedAt,
+          reverted: def.reverted,
+        };
+        const metadataJson = JSON.stringify(metadata);
+
+        for (const si of def.sessions) {
+          insertPrCorrelation.run(
+            randomUUID(),
+            sessionIds[si],
+            String(def.prNumber),
+            metadataJson,
+          );
+        }
+      }
+    });
+    prTx();
+
+    // 10. Seed session_diffs cache for 6 sessions with synthetic diffs.
+    const getCommitHash = db.prepare(
+      `SELECT g.hash FROM correlations c
+       JOIN git_commits g ON g.id = c.target_id
+       WHERE c.session_id = ? AND c.correlation_type = 'git-commit'
+       LIMIT 1`,
+    );
+
+    const insertDiff = db.prepare(
+      `INSERT INTO session_diffs (id, session_id, commit_hash, diff_text, stats_json, cached_at, size_bytes, skipped_reason)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    );
+
+    const diffSessionIndices = [0, 3, 6, 9, 12, 15];
+    const diffTx = db.transaction(() => {
+      for (const si of diffSessionIndices) {
+        const row = getCommitHash.get(sessionIds[si]) as { hash: string } | undefined;
+        if (!row) continue;
+
+        const seed = seeds[si];
+        const words = seed.summary.split(/\s+/);
+        const verb = (words[0] ?? 'fix').toLowerCase().replace(/[^a-z]/g, '');
+        const noun = (words[words.length - 1] ?? 'mod').toLowerCase().replace(/[^a-z0-9-]/g, '');
+        const fileName = `${verb}-${noun}`;
+
+        const diffText = [
+          `diff --git a/src/${fileName}.ts b/src/${fileName}.ts`,
+          'index abc123..def456 100644',
+          `--- a/src/${fileName}.ts`,
+          `+++ b/src/${fileName}.ts`,
+          '@@ -10,7 +10,7 @@ export function compute() {',
+          '-  // TODO: stub',
+          '+  return process()',
+          ' }',
+          '',
+        ].join('\n') + '\n';
+
+        const sizeBytes = Buffer.byteLength(diffText, 'utf-8');
+
+        insertDiff.run(
+          randomUUID(),
+          sessionIds[si],
+          row.hash,
+          diffText,
+          JSON.stringify({ files: 1, insertions: 3, deletions: 1 }),
+          Date.now(),
+          sizeBytes,
+          null,
+        );
+      }
+    });
+    diffTx();
+
     const commitCount = (db.prepare('SELECT count(*) as n FROM git_commits').get() as { n: number }).n;
     const testCount = (db.prepare('SELECT count(*) as n FROM test_outcomes').get() as { n: number }).n;
+    const qualityCount = (db.prepare('SELECT count(*) as n FROM sessions WHERE prompt_quality_json IS NOT NULL').get() as { n: number }).n;
+    const prCount = (db.prepare("SELECT count(*) as n FROM correlations WHERE correlation_type = 'pr-outcome'").get() as { n: number }).n;
+    const diffCount = (db.prepare('SELECT count(*) as n FROM session_diffs').get() as { n: number }).n;
 
     console.log(
-      `Seeded ${sessionIds.length} sessions, ${commitCount} commits, ${testCount} test outcomes into ${DATA_DIR}`,
+      `Seeded ${sessionIds.length} sessions, ${commitCount} commits, ${testCount} test outcomes`,
+    );
+    console.log(
+      `  prompt_quality: ${qualityCount}, pr-outcomes: ${prCount}, session_diffs: ${diffCount}`,
     );
   } finally {
     storage.close();

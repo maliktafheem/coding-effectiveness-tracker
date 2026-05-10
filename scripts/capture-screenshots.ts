@@ -31,6 +31,7 @@ const STALE_FILES = [
   'screenshot-overview.png',
   'screenshot-Timeline.png',
   'screenshot-Tools.png',
+  'screenshot-Prompting.png',
 ];
 
 const OUTPUTS = {
@@ -38,6 +39,7 @@ const OUTPUTS = {
   timeline: resolve(ASSETS_DIR, 'screenshot-timeline.png'),
   tools: resolve(ASSETS_DIR, 'screenshot-tools.png'),
   sessionDetail: resolve(ASSETS_DIR, 'screenshot-session-detail.png'),
+  prompting: resolve(ASSETS_DIR, 'screenshot-prompting.png'),
 };
 
 async function waitForHealth(url: string, maxMs: number): Promise<void> {
@@ -219,6 +221,12 @@ async function captureScreenshots(): Promise<void> {
       const msg = err instanceof Error ? err.message : String(err);
       console.warn(`Skipping session-detail capture: ${msg}`);
     }
+
+    // --- Capture 5: Prompting
+    await page.locator('.nav a:has-text("Prompting")').click();
+    await page.locator('table tbody tr').first().waitFor({ state: 'visible', timeout: 10_000 });
+    await sleep(400);
+    await page.screenshot({ path: OUTPUTS.prompting, fullPage: true, type: 'png' });
 
     await context.close();
   } finally {
