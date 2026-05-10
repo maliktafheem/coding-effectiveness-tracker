@@ -360,13 +360,22 @@ export function registerRoutes(app: FastifyInstance, opts: ServerOptions): void 
       const session = db.prepare('SELECT * FROM sessions WHERE id = ?').get(id) as Record<string, unknown> | undefined;
       if (!session) return reply.code(404).send({ error: 'Session not found' });
       const pq = getResult(storage, id);
-      const correlations = (db.prepare('SELECT * FROM correlations WHERE session_id = ?').all(id) as Record<string, unknown>[]).map(c => ({
-        id: c.id as string,
-        type: c.correlation_type as string,
-        targetId: (c.target_id as string | null) ?? null,
-        confidence: c.confidence as number,
-        reasons: c.metadata_json ? (JSON.parse(c.metadata_json as string).reasons as string[]) : [] as string[],
-      }));
+      const correlations = (db.prepare('SELECT * FROM correlations WHERE session_id = ?').all(id) as Record<string, unknown>[]).map(c => {
+        let reasons: string[] = [];
+        if (c.metadata_json) {
+          try {
+            const parsed = JSON.parse(c.metadata_json as string) as { reasons?: unknown };
+            if (Array.isArray(parsed.reasons)) reasons = parsed.reasons as string[];
+          } catch { /* ignore malformed */ }
+        }
+        return {
+          id: c.id as string,
+          type: c.correlation_type as string,
+          targetId: (c.target_id as string | null) ?? null,
+          confidence: c.confidence as number,
+          reasons,
+        };
+      });
       const outcomes = (db.prepare('SELECT * FROM outcomes WHERE session_id = ?').all(id) as Record<string, unknown>[]).map(o => ({
         id: o.id as string,
         type: o.outcome_type as string,
