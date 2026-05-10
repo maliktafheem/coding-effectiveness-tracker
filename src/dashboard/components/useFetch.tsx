@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 
 const API_BASE = window.location.origin;
 
-export function useFetch<T>(url: string, deps: unknown[] = []): { data: T | null; loading: boolean; error: string | null; refetch: () => void } {
+export function useFetch<T>(url: string | null, deps: unknown[] = []): { data: T | null; loading: boolean; error: string | null; refetch: () => void } {
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -11,6 +11,10 @@ export function useFetch<T>(url: string, deps: unknown[] = []): { data: T | null
   const refetch = useCallback(() => setTick(t => t + 1), []);
 
   useEffect(() => {
+    if (!url) {
+      setLoading(false);
+      return;
+    }
     let cancelled = false;
     setLoading(true);
     setError(null);

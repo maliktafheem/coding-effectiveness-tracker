@@ -1,7 +1,8 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mkdtempSync, rmSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import Database from 'better-sqlite3';
 import { Storage, StorageError } from '../src/storage.js';
 import { ensureDataDir } from '../src/config.js';
 
@@ -112,8 +113,8 @@ describe('Storage', () => {
       const migrations = storage2.db
         .prepare('SELECT * FROM _migrations')
         .all() as { name: string }[];
-      expect(migrations.length).toBe(2);
-      expect(migrations.map((m) => m.name)).toEqual(['001_core_schema', '002_v02_features']);
+      expect(migrations.length).toBe(3);
+      expect(migrations.map((m) => m.name)).toEqual(['001_core_schema', '002_v02_features', '003_session_diffs_cascade']);
     } finally {
       storage2.close();
     }
@@ -230,6 +231,62 @@ describe('foreign_keys enforcement', () => {
          VALUES (?, ?, ?, ?, ?, ?)`,
       ).run('d1', 'nonexistent-session', 'abc', '{}', 0, 0);
     }).toThrow(/FOREIGN KEY/);
+  });
+});
+
+describe('FK pragma safety', () => {
+  let dir: string;
+  let storage: Storage;
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'cet-fk-safety-'));
+  });
+  afterEach(() => {
+    try { storage.close(); } catch { /* ignore */ }
+    safeCleanup(dir);
+  });
+
+  it('logs warning but opens successfully when pre-existing FK violations present', () => {
+    // Open clean DB first (creates full schema with FK ON)
+    storage = Storage.open({ dataDir: dir });
+    storage.close();
+
+    // Re-open with raw better-sqlite3, FK is OFF by default, inject orphan
+    const raw = new Database(join(dir, 'tracker.db'));
+    raw.pragma('foreign_keys = OFF');
+    raw.prepare("INSERT INTO tools (id, name, display_name) VALUES ('t1', 't1', 'T1')").run();
+    raw.prepare("INSERT INTO sessions (id, source_tool_id) VALUES ('orphan-s', 'non-existent-tool')").run();
+    raw.close();
+
+    // Re-open via Storage — should detect FK violations and log warning
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    storage = Storage.open({ dataDir: dir });
+    expect(warnSpy).toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
+});
+
+describe('session_diffs cascade on session delete', () => {
+  let dir: string;
+  let storage: Storage;
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'cet-cascade-'));
+    storage = Storage.open({ dataDir: dir });
+  });
+  afterEach(() => {
+    storage.close();
+    safeCleanup(dir);
+  });
+
+  it('deletes session_diffs rows when session is deleted', () => {
+    storage.db.prepare('INSERT INTO tools (id, name, display_name) VALUES (?, ?, ?)').run('t', 't', 'T');
+    storage.db.prepare('INSERT INTO sessions (id, source_tool_id) VALUES (?, ?)').run('s1', 't');
+    storage.db.prepare(
+      `INSERT INTO session_diffs (id, session_id, commit_hash, stats_json, cached_at, size_bytes)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    ).run('d1', 's1', 'hash1', '{}', 0, 0);
+    storage.db.prepare('DELETE FROM sessions WHERE id = ?').run('s1');
+    const remaining = storage.db.prepare('SELECT COUNT(*) as c FROM session_diffs').get() as { c: number };
+    expect(remaining.c).toBe(0);
   });
 });
 

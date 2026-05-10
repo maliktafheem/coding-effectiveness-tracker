@@ -40,6 +40,15 @@ export class Storage {
     // but fail on the first pragma or integrity check.
     try {
       db.pragma('journal_mode = WAL');
+      // Check for pre-existing FK violations before enabling enforcement.
+      // Users upgrading from v0.1.x may have orphan rows from pre-pragma era.
+      const violations = db.pragma('foreign_key_check') as unknown[];
+      if (Array.isArray(violations) && violations.length > 0) {
+        console.warn(
+          `Warning: ${violations.length} pre-existing foreign key violation(s) detected in database. ` +
+          `Enabling FK enforcement — new inserts will be constrained but existing orphans remain.`,
+        );
+      }
       db.pragma('foreign_keys = ON');
       db.pragma('busy_timeout = 5000');
     } catch (err) {
@@ -304,6 +313,33 @@ function getMigrations(): Migration[] {
           ON session_diffs(session_id);
 
         ALTER TABLE sessions ADD COLUMN prompt_quality_json TEXT;
+      `,
+    },
+    {
+      name: '003_session_diffs_cascade',
+      sql: `
+        CREATE TABLE session_diffs_new (
+          id TEXT PRIMARY KEY,
+          session_id TEXT NOT NULL,
+          commit_hash TEXT NOT NULL,
+          diff_text TEXT,
+          stats_json TEXT NOT NULL,
+          cached_at INTEGER NOT NULL,
+          size_bytes INTEGER NOT NULL,
+          skipped_reason TEXT,
+          FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
+        );
+
+        INSERT INTO session_diffs_new SELECT * FROM session_diffs;
+
+        DROP TABLE session_diffs;
+        ALTER TABLE session_diffs_new RENAME TO session_diffs;
+
+        CREATE UNIQUE INDEX idx_session_diffs_unique
+          ON session_diffs(session_id, commit_hash);
+
+        CREATE INDEX idx_session_diffs_session
+          ON session_diffs(session_id);
       `,
     },
   ];

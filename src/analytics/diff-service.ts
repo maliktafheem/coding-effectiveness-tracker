@@ -83,8 +83,7 @@ export function getSessionDiffs(
       continue;
     }
 
-    const stats = getStats(opts.repoPath, c.hash);
-    const raw = getDiffText(opts.repoPath, c.hash);
+    const { stats, diff: raw } = getStatsAndDiff(opts.repoPath, c.hash);
     const size = Buffer.byteLength(raw, 'utf-8');
 
     if (size > DIFF_SIZE_CAP_BYTES) {
@@ -124,15 +123,24 @@ function fromCache(c: CommitRow, row: CacheRow): SessionCommitDiff {
   return { ...base, diff: row.diff_text ?? '' };
 }
 
-function getStats(repoPath: string, hash: string): DiffStats {
-  const out = execFileSync('git', ['show', '--numstat', '--format=', hash], {
+function getStatsAndDiff(repoPath: string, hash: string): { stats: DiffStats; diff: string } {
+  const out = execFileSync('git', ['show', '--numstat', '-p', '--format=', hash], {
     cwd: repoPath,
     encoding: 'utf-8',
+    maxBuffer: 10 * 1024 * 1024,
   });
   let files = 0;
   let insertions = 0;
   let deletions = 0;
-  for (const line of out.split('\n')) {
+  let diffStart = out.length;
+  const lines = out.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (line.startsWith('diff --git')) {
+      // Diff begins here; stats were above — compute byte offset
+      diffStart = lines.slice(0, i).join('\n').length + (i > 0 ? 1 : 0);
+      break;
+    }
     const parts = line.split('\t');
     if (parts.length < 3) continue;
     files++;
@@ -141,15 +149,8 @@ function getStats(repoPath: string, hash: string): DiffStats {
     if (!Number.isNaN(ins)) insertions += ins;
     if (!Number.isNaN(del)) deletions += del;
   }
-  return { files, insertions, deletions };
-}
-
-function getDiffText(repoPath: string, hash: string): string {
-  return execFileSync('git', ['show', '--format=', hash], {
-    cwd: repoPath,
-    encoding: 'utf-8',
-    maxBuffer: 10 * 1024 * 1024,
-  });
+  const diff = out.slice(diffStart);
+  return { stats: { files, insertions, deletions }, diff };
 }
 
 function upsert(
