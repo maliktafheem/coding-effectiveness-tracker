@@ -17,8 +17,8 @@ export default function TrendChart({ filterStr }: { filterStr: string }) {
   const maxSessions = Math.max(...points.map(p => p.sessionCount), 1);
 
   const WIDTH = 720;
-  const HEIGHT = 260;
-  const PAD = { top: 28, right: 24, bottom: 36, left: 56 };
+  const HEIGHT = 280;
+  const PAD = { top: 44, right: 24, bottom: 36, left: 56 };
   const chartW = WIDTH - PAD.left - PAD.right;
   const chartH = HEIGHT - PAD.top - PAD.bottom;
 
@@ -120,11 +120,11 @@ export default function TrendChart({ filterStr }: { filterStr: string }) {
               ))}
 
               {/* Legend */}
-              <g transform={`translate(${PAD.left}, ${PAD.top - 12})`} style={{ animation: `fadeSlideRight 0.5s 0.8s cubic-bezier(0.16, 1, 0.3, 1) both` }}>
+              <g transform={`translate(${PAD.left}, ${PAD.top - 6})`} style={{ animation: `fadeSlideRight 0.5s 0.8s cubic-bezier(0.16, 1, 0.3, 1) both` }}>
                 <line x1="0" y1="0" x2="18" y2="0" stroke="var(--accent-cyan)" strokeWidth="2" filter={glowUrl} />
-                <text x="24" y="4" fill="var(--text-secondary)" fontSize="10" letterSpacing="0.04em">Effectiveness Score</text>
+                <text x="24" y="3" fill="var(--text-secondary)" fontSize="10" letterSpacing="0.04em" dominantBaseline="middle">Effectiveness Score</text>
                 <rect x="168" y="-5" width="18" height="10" fill="var(--accent-violet)" opacity="0.25" rx="2" />
-                <text x="192" y="4" fill="var(--text-secondary)" fontSize="10" letterSpacing="0.04em">Session Volume</text>
+                <text x="192" y="3" fill="var(--text-secondary)" fontSize="10" letterSpacing="0.04em" dominantBaseline="middle">Session Volume</text>
               </g>
             </>
           );

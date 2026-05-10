@@ -38,8 +38,8 @@ export interface ChartProps<T> {
 export default function Chart<T>({
   points,
   width = 720,
-  height = 260,
-  padding = { top: 28, right: 24, bottom: 36, left: 56 },
+  height = 280,
+  padding = { top: 44, right: 24, bottom: 36, left: 56 },
   yMax,
   yTicks = [0, 0.25, 0.5, 0.75, 1],
   formatY,

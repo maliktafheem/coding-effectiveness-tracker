@@ -189,12 +189,18 @@ async function captureScreenshots(): Promise<void> {
     page.on('console', msg => console.log(`[browser ${msg.type()}]`, msg.text()));
     page.on('pageerror', err => console.log('[browser pageerror]', err.message));
 
-    // --- Capture 1: Overview
+    // --- Capture 1: Overview — clip to hero fold only (stats + trend chart)
+    // fullPage would capture Score Dimensions table + Period card, making the
+    // image 2600px+ tall which overflows when rendered at README width.
     await page.goto(`${BASE_URL}/`, { waitUntil: 'networkidle' });
     await page.getByText(/Effectiveness/i).first().waitFor({ state: 'visible', timeout: 15_000 });
     await page.locator('.card svg').first().waitFor({ state: 'visible', timeout: 5_000 }).catch(() => undefined);
     await sleep(1000);
-    await page.screenshot({ path: OUTPUTS.overview, fullPage: true, type: 'png' });
+    await page.screenshot({
+      path: OUTPUTS.overview,
+      fullPage: false,
+      type: 'png',
+    });
 
     // --- Capture 2: Timeline — click the nav link so React state updates.
     await page.locator('.nav a:has-text("Timeline")').click();
