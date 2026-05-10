@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - unreleased
+
+### Added
+
+- **`cet diff <session-id>`** — show git diff of commits linked to a session. Per-commit 100KB cache, live-fetch with `--no-cache`. Inline DiffPanel in dashboard session detail.
+- **`cet prompt-quality`** — score prompts by specificity, iteration, code blocks, examples, constraints. Pluggable `PromptAnalyzer` interface supports future LLM analyzers. New Prompting dashboard page.
+- **`cet sync --pr`** — fetch GitHub PR outcomes (requires `gh` CLI). Classifies sessions as shipped/reverted/abandoned/in-flight. Ship status pill in Timeline, ship-rate card in Overview, PR card in session detail.
+- **Ship status API** — `/api/timeline`, `/api/overview`, `/api/sessions/:id` now surface ship status derived from correlations.
+- **Prompt quality API** — `GET /api/prompt-quality` returns all scored sessions.
+
+### Changed
+
+- Migration 002 adds `session_diffs` table + `prompt_quality_json` column.
+- Migration 003 adds `ON DELETE CASCADE` to `session_diffs.session_id` FK.
+- Storage now enables `PRAGMA foreign_keys = ON` (logs warning on pre-existing violations).
+- `diff-service` consolidates two `git show` calls into one for ~2x perf on diff fetch.
+- `useFetch` hook now skips fetch when URL is empty/null (was wasting requests).
+
+### Docs
+
+- API reference documents new endpoints and response shapes.
+- Scoring doc explains opt-in ship rate dimension and prompt quality.
+
 ## [Unreleased]
 
 ### Added

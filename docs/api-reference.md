@@ -95,6 +95,14 @@ Aggregate overview of sessions with effectiveness score.
       "Test outcome data not available for tool 'claude-code'"
     ]
   },
+  "shipStatusBreakdown": {
+    "shipped": 8,
+    "reverted": 1,
+    "abandoned": 2,
+    "inFlight": 0,
+    "unlinked": 1,
+    "noPrData": 35
+  },
   "empty": false
 }
 ```
@@ -144,7 +152,8 @@ Get all sessions with correlation and outcome summaries for timeline display.
       "outcomeCount": 1,
       "outcomeLabels": ["shipped"],
       "hasOutcome": true,
-      "reworkCount": 0
+      "reworkCount": 0,
+      "shipStatus": "shipped"
     }
   ],
   "total": 47
@@ -281,7 +290,32 @@ Get detailed session information including correlations, outcomes, and metadata.
       "note": "Merged with tests passing"
     }
   ],
-  "uncorrelated": false
+  "uncorrelated": false,
+  "shipStatus": "shipped",
+  "prs": [
+    {
+      "prNumber": 42,
+      "state": "MERGED",
+      "title": "Add auth flow",
+      "url": "https://github.com/owner/repo/pull/42",
+      "mergedAt": "2025-01-15T12:00:00.000Z",
+      "closedAt": null,
+      "reverted": false
+    }
+  ],
+  "promptQuality": {
+    "overall": 0.73,
+    "signals": {
+      "specificity": 0.8,
+      "iteration": 0.6,
+      "hasCodeBlock": 1,
+      "hasExample": 0,
+      "hasConstraint": 0
+    },
+    "analyzerId": "heuristic-v1",
+    "analyzerVersion": 1,
+    "computedAt": "2025-01-15T11:35:00.000Z"
+  }
 }
 ```
 
@@ -424,6 +458,97 @@ When `raw=true`, includes full session metadata (otherwise metadata is excluded 
   "generatedAt": "2025-01-15T12:00:00.000Z"
 }
 ```
+
+---
+
+## `GET /api/sessions/:id/diff`
+
+Get git diff of commits linked to a session.
+
+**Path parameters:** `id` — Session UUID
+
+**Query parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `repo` | string | Path to git repository (optional override) |
+| `refresh` | boolean | Bypass cache and live-fetch (`1`/`true`) |
+
+**Response:**
+```json
+{
+  "commits": [
+    {
+      "hash": "a1b2c3d4e5f6...",
+      "shortHash": "a1b2c3d",
+      "message": "Add auth flow",
+      "stats": {
+        "files": 3,
+        "insertions": 120,
+        "deletions": 15
+      },
+      "diff": "@@ -1,5 +1,12 @@\n...",
+      "skipped": false
+    },
+    {
+      "hash": "f6e5d4c3b2a1...",
+      "shortHash": "f6e5d4c",
+      "message": "Fix lint error",
+      "stats": {
+        "files": 1,
+        "insertions": 2,
+        "deletions": 2
+      },
+      "diff": null,
+      "skipped": true
+    }
+  ]
+}
+```
+
+Per-commit diff is capped at 100 KB. Commits exceeding the cap return `"diff": null` and `"skipped": true`. Use `?refresh=1` to bypass cache and live-fetch from the repository.
+
+**Errors:**
+- `400` — Repo path cannot be resolved
+- `404` — Session not found
+- `503` — Workspace not initialized
+
+---
+
+## `GET /api/prompt-quality`
+
+Get prompt quality scores for all sessions.
+
+**Response:**
+```json
+{
+  "sessions": [
+    {
+      "sessionId": "uuid-string",
+      "toolId": "claude-code",
+      "startedAt": "2025-01-15T10:00:00.000Z",
+      "overall": 0.73,
+      "signals": {
+        "specificity": 0.8,
+        "iteration": 0.6,
+        "hasCodeBlock": 1,
+        "hasExample": 0,
+        "hasConstraint": 0
+      },
+      "analyzerId": "heuristic-v1",
+      "analyzerVersion": 1,
+      "computedAt": "2025-01-15T11:35:00.000Z"
+    }
+  ],
+  "avgOverall": 0.68,
+  "analyzer": "heuristic-v1"
+}
+```
+
+Returns empty sessions array (`"sessions": []`) and `"avgOverall": 0` when the database has no scored sessions.
+
+**Errors:**
+- `503` — Workspace not initialized
 
 ---
 

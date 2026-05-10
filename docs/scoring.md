@@ -160,3 +160,47 @@ The report output shows each dimension's **current weight** and explanation.
 - Missing token/cost data from some AI tools means the cost-efficiency dimension may be unavailable for those tools.
 - The rework indicator only captures metadata-based retry counts. If a tool does not expose rework metadata, the dimension reports "no rework detected" rather than "unknown." Sessions with malformed `metadata_json` are excluded from the signal and surfaced in the explanation; the dimension is only reported unavailable when *all* sessions have unparseable metadata.
 - Correlation and rework queries use SQLite's `json_each` and `json_extract` to aggregate over filtered session sets in a single pass — no per-session loops.
+
+---
+
+## Ship rate (opt-in, v0.2)
+
+Session-level ship status is derived from correlations with GitHub PRs.
+
+Values:
+- `shipped` — Merged PR, not later reverted
+- `reverted` — Merged then later reverted PR
+- `abandoned` — Closed unmerged PR
+- `in-flight` — Open PR
+- `unlinked` — No matching commits found
+
+To populate: run `cet sync --pr`. Requires the `gh` CLI installed and authenticated with GitHub.
+
+**Opt-in scoring:** `shipRate` is NOT in the default weighted score. To enable, edit `scoring.json`:
+
+```json
+{
+  "weights": {
+    "shipRate": 0.10
+  }
+}
+```
+
+Default weight is 0. Adding this weight rescales existing weights (users should manually rebalance). No v0.2.0 code actually reads this weight — it is reserved for a future release.
+
+---
+
+## Prompt quality (v0.2)
+
+Heuristic score 0-1 based on the first user prompt in a session.
+
+Signals:
+- **specificity** — Word count of the prompt
+- **iteration** — Number of assistant turns
+- **hasCodeBlock** — Whether prompt contains a code block
+- **hasExample** — Whether prompt contains an example
+- **hasConstraint** — Whether prompt mentions constraints (performance, security, etc.)
+
+Prompt quality is not part of the effectiveness score. It is a separate dimension you can inspect via the dashboard "Prompting" page or `cet prompt-quality`.
+
+The scoring uses a pluggable `PromptAnalyzer` interface. The built-in `heuristic-v1` analyzer computes signals locally. Future releases may include LLM-based analyzers that provide richer evaluations.

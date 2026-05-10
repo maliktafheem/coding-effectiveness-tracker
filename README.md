@@ -220,6 +220,9 @@ cet serve
 | `cet serve [--port <port>]` | Start the local dashboard and API server on `127.0.0.1`; default port is `43187`. |
 | `cet export --output <path> [--format json\|markdown] [--overwrite] [--tool <id>] [--project <id>] [--from <date>] [--to <date>]` | Export an effectiveness report to a local file. |
 | `cet watch [--interval <min>] [--stop] [--status]` | Background daemon that polls for new AI sessions and git changes. Start, stop, or check status. |
+| `cet diff <session-id>` | Show git diff of commits linked to a session. |
+| `cet prompt-quality` | Score prompt quality for sessions. |
+| `cet sync --pr` | Fetch GitHub PR outcomes (requires `gh` CLI). |
 
 Most commands also accept `--data-dir <path>` to use a custom tracker data directory.
 
@@ -237,7 +240,9 @@ Run `cet serve` and open the printed local address to view the dashboard. The lo
 - `GET /api/trends`
 - `GET /api/available-tools`
 - `GET /api/sessions/:id`
+- `GET /api/sessions/:id/diff`
 - `POST /api/sessions/:id/annotations`
+- `GET /api/prompt-quality`
 - `PATCH /api/annotations/:id`
 - `GET /api/export/json`
 - `GET /api/export/markdown`
@@ -259,7 +264,7 @@ Comprehensive documentation is available in the [docs/](docs/) folder:
 - [Architecture](docs/architecture.md) — System components, data flow, and key patterns
 - [Development Guide](docs/development.md) — Setup, build/test, project structure, cross-platform notes
 - [CLI Reference](docs/cli-reference.md) — All CLI commands with options and examples
-- [API Reference](docs/api-reference.md) — All 12 API endpoints with query parameters and response shapes
+- [API Reference](docs/api-reference.md) — All 14 API endpoints with query parameters and response shapes
 - [Data Model](docs/data-model.md) — Database tables, columns, indexes, and relationships
 - [Scoring Model](docs/scoring.md) — Effectiveness dimensions, weights, and configuration
 - [Importer Guide](docs/importer-guide.md) — ToolImporter interface, registration, and privacy redaction
