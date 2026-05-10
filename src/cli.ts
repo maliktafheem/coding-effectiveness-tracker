@@ -93,6 +93,7 @@ program
   .option('-d, --data-dir <path>', 'Custom data directory path')
   .option('-r, --repo <path>', 'Path to local Git repository (required)')
   .option('-p, --project <id>', 'Project ID (defaults to repo directory name)')
+  .option('--pr', 'Also fetch GitHub PR outcomes (requires gh CLI authed)')
   .action(handleSync);
 
 program

@@ -18,11 +18,18 @@ import { Storage, StorageError } from '../storage.js';
 import { collectGitSignals, storeGitSignals } from '../collectors/git.js';
 import { correlateSession } from '../correlation/engine.js';
 import { deriveProjectId, deriveProjectName } from '../project-identity.js';
+import {
+  DefaultGhRunner,
+  FixtureGhRunner,
+  syncPrOutcomes,
+  type GhRunner,
+} from '../correlation/pr-outcomes.js';
 
 interface SyncOptions {
   dataDir?: string;
   repo: string;
   project?: string;
+  pr?: boolean;
 }
 
 export async function handleSync(opts: SyncOptions): Promise<void> {
@@ -115,6 +122,30 @@ export async function handleSync(opts: SyncOptions): Promise<void> {
     console.log('  Correlations created: ' + correlationCount);
     console.log('');
     console.log('Privacy: All data stays local. No remote git calls were made.');
+
+    if (opts.pr) {
+      console.log('\nFetching PR outcomes from GitHub...');
+      try {
+        const fixturePath = process.env.CET_TEST_GH_FIXTURE;
+        const runner: GhRunner = fixturePath
+          ? new FixtureGhRunner(fixturePath)
+          : new DefaultGhRunner();
+        const prSummary = await syncPrOutcomes(storage, runner);
+        console.log(
+          `Found ${prSummary.prsFound} PR(s), wrote ${prSummary.correlationsWritten} new pr-outcome correlation(s).`,
+        );
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg.includes('gh not available')) {
+          console.error('Error: `gh` CLI not installed. Install from https://cli.github.com/ to use --pr.');
+        } else if (msg.includes('gh not authed')) {
+          console.error('Error: `gh` CLI not authenticated. Run `gh auth login`.');
+        } else {
+          console.error('Error fetching PR outcomes: ' + msg);
+        }
+        process.exitCode = 1;
+      }
+    }
   } finally {
     storage?.close();
   }

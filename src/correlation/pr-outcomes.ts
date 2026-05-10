@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import type { Storage } from '../storage.js';
 
 export const MAX_HASHES_PER_CALL = 20;
@@ -254,6 +255,27 @@ export async function syncPrOutcomes(
  * Spawns `gh pr list` with search query. Retries on rate-limit (429) with
  * exponential backoff [5s, 15s, 45s, 120s]. Max 4 retries, then throws.
  */
+/**
+ * Test-only runner that reads PR records from a JSON file path given via
+ * CET_TEST_GH_FIXTURE env var. Enables integration tests without installed gh.
+ */
+export class FixtureGhRunner implements GhRunner {
+  private fixturePath: string;
+  constructor(fixturePath: string) {
+    this.fixturePath = fixturePath;
+  }
+  async available(): Promise<boolean> {
+    return true;
+  }
+  async authed(): Promise<boolean> {
+    return true;
+  }
+  async prList(_hashes: string[]): Promise<GhPrRecord[]> {
+    const raw = readFileSync(this.fixturePath, 'utf-8');
+    return JSON.parse(raw) as GhPrRecord[];
+  }
+}
+
 export class DefaultGhRunner implements GhRunner {
   async available(): Promise<boolean> {
     try {

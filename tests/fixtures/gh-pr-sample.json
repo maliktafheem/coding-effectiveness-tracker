@@ -1,0 +1,26 @@
+[
+  {
+    "number": 42,
+    "state": "MERGED",
+    "title": "Add test feature",
+    "url": "https://github.com/maliktafheem/coding-effectiveness-tracker/pull/42",
+    "mergedAt": "2026-01-01T00:00:00Z",
+    "closedAt": null,
+    "body": null,
+    "commits": [
+      { "oid": "abc123def456abc123def456abc123def456abcd" }
+    ]
+  },
+  {
+    "number": 99,
+    "state": "OPEN",
+    "title": "WIP new thing",
+    "url": "https://github.com/maliktafheem/coding-effectiveness-tracker/pull/99",
+    "mergedAt": null,
+    "closedAt": null,
+    "body": null,
+    "commits": [
+      { "oid": "feedbadfacadefeedbadfacadefeedbadfacaded" }
+    ]
+  }
+]
