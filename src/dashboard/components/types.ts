@@ -15,4 +15,4 @@ export type {
 } from '../../api/contract.js';
 
 /** Dashboard navigation pages. */
-export type Page = 'overview' | 'timeline' | 'tools' | 'export';
+export type Page = 'overview' | 'timeline' | 'tools' | 'export' | 'prompting';

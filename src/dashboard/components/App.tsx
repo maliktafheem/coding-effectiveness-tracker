@@ -5,7 +5,7 @@ import ProjectFilterSelect from './ProjectFilterSelect';
 /** Read initial page from URL hash, default to overview. */
 function getPageFromHash(): Page {
   const hash = window.location.hash.replace('#', '');
-  if (['overview', 'timeline', 'tools', 'export'].includes(hash)) return hash as Page;
+  if (['overview', 'timeline', 'tools', 'export', 'prompting'].includes(hash)) return hash as Page;
   return 'overview';
 }
 
@@ -15,6 +15,7 @@ const TimelinePage = lazy(() => import('./TimelinePage'));
 const ToolsPage = lazy(() => import('./ToolsPage'));
 const ExportPage = lazy(() => import('./ExportPage'));
 const SessionDetailView = lazy(() => import('./SessionDetailView'));
+const PromptQualityPage = lazy(() => import('./PromptQualityPage'));
 
 interface ToolEntry { id: string; name: string; sessionCount: number }
 
@@ -72,6 +73,7 @@ export function App() {
           <a href="#" className={page === 'timeline' ? 'active' : ''} onClick={e => { e.preventDefault(); setPage('timeline'); setSelectedSession(null); }}>Timeline</a>
           <a href="#" className={page === 'tools' ? 'active' : ''} onClick={e => { e.preventDefault(); setPage('tools'); setSelectedSession(null); }}>Tools</a>
           <a href="#" className={page === 'export' ? 'active' : ''} onClick={e => { e.preventDefault(); setPage('export'); }}>Export</a>
+          <a href="#" className={page === 'prompting' ? 'active' : ''} onClick={e => { e.preventDefault(); setPage('prompting'); setSelectedSession(null); }}>Prompting</a>
         </div>
       </div>
 
@@ -111,6 +113,11 @@ export function App() {
           {page === 'export' && (
             <PageLoader>
               <ExportPage filterStr={filterStr} />
+            </PageLoader>
+          )}
+          {page === 'prompting' && (
+            <PageLoader>
+              <PromptQualityPage />
             </PageLoader>
           )}
         </>
