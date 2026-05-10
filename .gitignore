@@ -17,3 +17,6 @@ docs/assets/.demo-data/
 .agents/
 docs/superpowers/
 skills-lock.json
+.claude/
+.commandcode/
+plan.md

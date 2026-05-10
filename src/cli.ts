@@ -194,7 +194,7 @@ if (process.argv[1]?.endsWith('cli.ts') || process.argv[1]?.endsWith('cli.js')) 
     console.log('  cet import --help     Learn about importing from specific tools');
     console.log('  cet watch --help      Learn about background monitoring');
     console.log('');
-    console.log('Docs: https://github.com/TafheemMalik/coding-effectiveness-tracker');
+    console.log('Docs: https://github.com/maliktafheem/coding-effectiveness-tracker');
     console.log('All data stays local. No telemetry.');
     console.log('');
     process.exit(0);

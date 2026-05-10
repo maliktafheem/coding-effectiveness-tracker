@@ -52,23 +52,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **E2E**: Stabilize browser dashboard navigation with reliable wait-for-content ([5c27eba])
 - **Dashboard**: Scope `/api/overview` outcomeCount to filtered sessions ([e5b638f])
 
-[6f92585]: https://github.com/TafheemMalik/coding-effectiveness-tracker/commit/6f92585
-[9041d58]: https://github.com/TafheemMalik/coding-effectiveness-tracker/commit/9041d58
-[2e5be3d]: https://github.com/TafheemMalik/coding-effectiveness-tracker/commit/2e5be3d
-[d0c3ba4]: https://github.com/TafheemMalik/coding-effectiveness-tracker/commit/d0c3ba4
-[9f25a20]: https://github.com/TafheemMalik/coding-effectiveness-tracker/commit/9f25a20
-[8ffbed2]: https://github.com/TafheemMalik/coding-effectiveness-tracker/commit/8ffbed2
-[c787e7e]: https://github.com/TafheemMalik/coding-effectiveness-tracker/commit/c787e7e
-[736a43e]: https://github.com/TafheemMalik/coding-effectiveness-tracker/commit/736a43e
-[e57783b]: https://github.com/TafheemMalik/coding-effectiveness-tracker/commit/e57783b
-[1e686c6]: https://github.com/TafheemMalik/coding-effectiveness-tracker/commit/1e686c6
-[a4c895c]: https://github.com/TafheemMalik/coding-effectiveness-tracker/commit/a4c895c
-[840dbce]: https://github.com/TafheemMalik/coding-effectiveness-tracker/commit/840dbce
-[ee93cb5]: https://github.com/TafheemMalik/coding-effectiveness-tracker/commit/ee93cb5
-[79d3a7d]: https://github.com/TafheemMalik/coding-effectiveness-tracker/commit/79d3a7d
-[9a29701]: https://github.com/TafheemMalik/coding-effectiveness-tracker/commit/9a29701
-[a7efb6f]: https://github.com/TafheemMalik/coding-effectiveness-tracker/commit/a7efb6f
-[5c27eba]: https://github.com/TafheemMalik/coding-effectiveness-tracker/commit/5c27eba
-[e5b638f]: https://github.com/TafheemMalik/coding-effectiveness-tracker/commit/e5b638f
-[6e897a9]: https://github.com/TafheemMalik/coding-effectiveness-tracker/commit/6e897a9
-[4a83a15]: https://github.com/TafheemMalik/coding-effectiveness-tracker/commit/4a83a15
+[6f92585]: https://github.com/maliktafheem/coding-effectiveness-tracker/commit/6f92585
+[9041d58]: https://github.com/maliktafheem/coding-effectiveness-tracker/commit/9041d58
+[2e5be3d]: https://github.com/maliktafheem/coding-effectiveness-tracker/commit/2e5be3d
+[d0c3ba4]: https://github.com/maliktafheem/coding-effectiveness-tracker/commit/d0c3ba4
+[9f25a20]: https://github.com/maliktafheem/coding-effectiveness-tracker/commit/9f25a20
+[8ffbed2]: https://github.com/maliktafheem/coding-effectiveness-tracker/commit/8ffbed2
+[c787e7e]: https://github.com/maliktafheem/coding-effectiveness-tracker/commit/c787e7e
+[736a43e]: https://github.com/maliktafheem/coding-effectiveness-tracker/commit/736a43e
+[e57783b]: https://github.com/maliktafheem/coding-effectiveness-tracker/commit/e57783b
+[1e686c6]: https://github.com/maliktafheem/coding-effectiveness-tracker/commit/1e686c6
+[a4c895c]: https://github.com/maliktafheem/coding-effectiveness-tracker/commit/a4c895c
+[840dbce]: https://github.com/maliktafheem/coding-effectiveness-tracker/commit/840dbce
+[ee93cb5]: https://github.com/maliktafheem/coding-effectiveness-tracker/commit/ee93cb5
+[79d3a7d]: https://github.com/maliktafheem/coding-effectiveness-tracker/commit/79d3a7d
+[9a29701]: https://github.com/maliktafheem/coding-effectiveness-tracker/commit/9a29701
+[a7efb6f]: https://github.com/maliktafheem/coding-effectiveness-tracker/commit/a7efb6f
+[5c27eba]: https://github.com/maliktafheem/coding-effectiveness-tracker/commit/5c27eba
+[e5b638f]: https://github.com/maliktafheem/coding-effectiveness-tracker/commit/e5b638f
+[6e897a9]: https://github.com/maliktafheem/coding-effectiveness-tracker/commit/6e897a9
+[4a83a15]: https://github.com/maliktafheem/coding-effectiveness-tracker/commit/4a83a15

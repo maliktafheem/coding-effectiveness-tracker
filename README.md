@@ -4,7 +4,7 @@
   <a href="https://www.npmjs.com/package/coding-effectiveness-tracker"><img src="https://img.shields.io/npm/v/coding-effectiveness-tracker" alt="npm version"></a>
   <a href="LICENSE"><img src="https://img.shields.io/npm/l/coding-effectiveness-tracker" alt="MIT License"></a>
   <a href="package.json"><img src="https://img.shields.io/badge/node-%3E%3D20-brightgreen" alt="Node >=20"></a>
-  <a href="https://github.com/TafheemMalik/coding-effectiveness-tracker/actions"><img src="https://img.shields.io/github/actions/workflow/status/TafheemMalik/coding-effectiveness-tracker/ci.yml" alt="CI Status"></a>
+  <a href="https://github.com/maliktafheem/coding-effectiveness-tracker/actions"><img src="https://img.shields.io/github/actions/workflow/status/maliktafheem/coding-effectiveness-tracker/ci.yml" alt="CI Status"></a>
 </p>
 
 > Stop guessing. See whether AI-assisted coding is actually shipping code.

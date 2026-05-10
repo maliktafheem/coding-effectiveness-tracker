@@ -24,7 +24,7 @@ Thank you for considering contributing to the Coding Effectiveness Tracker. This
 1. Fork and clone the repository:
 
    ```powershell
-   git clone https://github.com/TafheemMalik/coding-effectiveness-tracker.git
+   git clone https://github.com/maliktafheem/coding-effectiveness-tracker.git
    cd coding-effectiveness-tracker
    ```
 

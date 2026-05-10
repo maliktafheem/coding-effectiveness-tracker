@@ -36,6 +36,6 @@ Add any other context, screenshots, or references about the feature request here
 
 ## Checklist
 
-- [ ] I have checked the existing [issues](https://github.com/TafheemMalik/coding-effectiveness-tracker/issues) and this is not a duplicate.
-- [ ] I have checked the [documentation](https://github.com/TafheemMalik/coding-effectiveness-tracker/tree/master/docs) and this feature is not already documented.
+- [ ] I have checked the existing [issues](https://github.com/maliktafheem/coding-effectiveness-tracker/issues) and this is not a duplicate.
+- [ ] I have checked the [documentation](https://github.com/maliktafheem/coding-effectiveness-tracker/tree/master/docs) and this feature is not already documented.
 - [ ] I understand this is a local-first tool and features requiring cloud infrastructure may be out of scope.

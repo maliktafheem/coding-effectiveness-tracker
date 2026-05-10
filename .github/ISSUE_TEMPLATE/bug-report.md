@@ -51,6 +51,6 @@ Add any other context about the problem here, such as:
 
 ## Checklist
 
-- [ ] I have checked the existing [issues](https://github.com/TafheemMalik/coding-effectiveness-tracker/issues) and this is not a duplicate.
+- [ ] I have checked the existing [issues](https://github.com/maliktafheem/coding-effectiveness-tracker/issues) and this is not a duplicate.
 - [ ] I have included all relevant system information.
 - [ ] I have redacted any sensitive information from the logs.

@@ -10,7 +10,7 @@
 
 We take the security of Coding Effectiveness Tracker seriously. If you believe you have found a security vulnerability, please report it by opening a **private vulnerability report** via the GitHub Security tab at:
 
-https://github.com/TafheemMalik/coding-effectiveness-tracker/security/advisories/new
+https://github.com/maliktafheem/coding-effectiveness-tracker/security/advisories/new
 
 Do not open a public issue for security vulnerabilities.
 
