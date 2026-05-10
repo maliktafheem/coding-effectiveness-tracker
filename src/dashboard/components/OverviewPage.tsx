@@ -59,6 +59,15 @@ export default function OverviewPage({ filterStr }: { filterStr: string }) {
           <div className="label">Effectiveness</div>
           <div className="score-bar"><div className="score-fill" style={{ width: pct + '%', background: fillColor }}></div></div>
         </div>
+        <div className="card stat">
+          <div className="value">{(data.shipStatusBreakdown.shipped + data.shipStatusBreakdown.reverted + data.shipStatusBreakdown.abandoned + data.shipStatusBreakdown.inFlight) > 0
+            ? Math.round(data.shipStatusBreakdown.shipped / (data.shipStatusBreakdown.shipped + data.shipStatusBreakdown.reverted + data.shipStatusBreakdown.abandoned + data.shipStatusBreakdown.inFlight) * 100) + '%'
+            : '—'}</div>
+          <div className="label">Ship rate</div>
+          {(data.shipStatusBreakdown.shipped + data.shipStatusBreakdown.reverted + data.shipStatusBreakdown.abandoned + data.shipStatusBreakdown.inFlight) > 0
+            ? <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{data.shipStatusBreakdown.shipped} shipped, {data.shipStatusBreakdown.reverted} reverted, {data.shipStatusBreakdown.abandoned} abandoned, {data.shipStatusBreakdown.inFlight} in flight</div>
+            : <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>No PR data yet. Run <code>cet sync --pr</code>.</div>}
+        </div>
       </div>
 
       <TrendChart filterStr={filterStr} />

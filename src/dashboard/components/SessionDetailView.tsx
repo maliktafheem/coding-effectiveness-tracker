@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { useFetch } from './useFetch';
 import AnnotationForm from './AnnotationForm';
 import DiffPanel from './DiffPanel';
+import ShipStatusPill from './ShipStatusPill';
+import PRCard from './PRCard';
 import type { SessionDetail, OverviewData } from './types';
 
 const API_BASE = window.location.origin;
@@ -69,6 +71,7 @@ export default function SessionDetailView({ sessionId, onBack }: { sessionId: st
           {data.tokensOutput != null && <div><strong>Tokens Out:</strong> {data.tokensOutput.toLocaleString()}</div>}
           {data.costEstimate != null && <div><strong>Cost:</strong> </div>}
           {data.reworkCount > 0 && <div><strong>Rework:</strong> <span style={{color: '#fbbf24', fontWeight: 'bold'}}>{data.reworkCount} rework attempt(s)</span></div>}
+          {data.shipStatus !== undefined && <div><strong>Ship:</strong> <ShipStatusPill value={data.shipStatus} /></div>}
         </div>
       </div>
 
@@ -145,6 +148,8 @@ export default function SessionDetailView({ sessionId, onBack }: { sessionId: st
           </div>
         </div>
       )}
+
+      <PRCard prs={data.prs ?? []} />
 
       <DiffPanel sessionId={sessionId} />
 
