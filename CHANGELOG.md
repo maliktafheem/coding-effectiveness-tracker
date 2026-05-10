@@ -24,6 +24,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Importers**: Registry is now authoritative for project identity derivation. Importers no longer set `session.projectId` directly; the registry calls `deriveProjectId(projectPath)` when `metadata.projectPath` is present, preventing collisions between unrelated repositories that share a folder name.
 - **Docs**: `docs/privacy.md` now documents redaction pipeline limitations explicitly (blocklist scope, novel formats, high-entropy free text, `raw=true` export warning).
 
+### Fixed
+
+- **Packaging**: Exclude `docs/assets/.demo-data/` (dev scratch tracker.db + scoring.json, ~176 KB) from the published npm tarball via `files` negations and `.npmignore`.
+
 ## [0.1.0] - 2026-05-07
 
 ### Added

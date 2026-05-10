@@ -53,7 +53,12 @@
     "bin",
     "README.md",
     "LICENSE",
-    "docs"
+    "docs",
+    "!docs/assets/.demo-data",
+    "!**/*.db",
+    "!**/*.db-journal",
+    "!**/*.db-wal",
+    "!**/*.db-shm"
   ],
   "dependencies": {
     "@fastify/static": "^9.1.3",

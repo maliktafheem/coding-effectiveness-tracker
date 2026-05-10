@@ -1,0 +1,11 @@
+docs/assets/.demo-data/
+**/*.db
+**/*.db-journal
+**/*.db-wal
+**/*.db-shm
+.claude/
+.commandcode/
+plan.md
+plans/
+scripts/
+tests/
