@@ -72,14 +72,7 @@ export interface OverviewResponse {
 // GET /api/timeline
 // ---------------------------------------------------------------------------
 
-/**
- * One row in the timeline list.
- *
- * DRIFT NOTE: routes.ts also emits `externalId` on each timeline item but
- * the dashboard TimelineSession type does not declare it. The field is
- * harmless (extra data ignored by the dashboard) but is noted here for
- * completeness. It is included in this contract so routes.ts can type-check.
- */
+/** One row in the timeline list. */
 export interface TimelineSessionItem {
   id: string;
   sourceToolId: string;
