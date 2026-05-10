@@ -184,21 +184,41 @@ async function captureScreenshots(): Promise<void> {
     const context = await browser.newContext({
       viewport: { width: 1600, height: 1000 },
       deviceScaleFactor: 1.5,
+      // Tell the app we don't want motion; also injected below to be thorough.
+      reducedMotion: 'reduce',
+    });
+    // Disable CSS animations/transitions on every page so screenshots capture
+    // the settled state instead of mid-animation frames (e.g. the TrendChart
+    // legend was clipping because its fadeSlideRight animation was still
+    // running when the shutter fired).
+    await context.addInitScript(() => {
+      const style = document.createElement('style');
+      style.textContent = `
+        *, *::before, *::after {
+          animation-duration: 0s !important;
+          animation-delay: 0s !important;
+          transition-duration: 0s !important;
+          transition-delay: 0s !important;
+        }
+      `;
+      const apply = () => document.head && document.head.appendChild(style);
+      if (document.head) apply();
+      else document.addEventListener('DOMContentLoaded', apply);
     });
     const page = await context.newPage();
     page.on('console', msg => console.log(`[browser ${msg.type()}]`, msg.text()));
     page.on('pageerror', err => console.log('[browser pageerror]', err.message));
 
-    // --- Capture 1: Overview — clip to hero fold only (stats + trend chart)
-    // fullPage would capture Score Dimensions table + Period card, making the
-    // image 2600px+ tall which overflows when rendered at README width.
+    // --- Capture 1: Overview — full page so Score Dimensions + Period card
+    // are visible below the hero fold. Animations are force-disabled above so
+    // the legend and chart render in their settled state.
     await page.goto(`${BASE_URL}/`, { waitUntil: 'networkidle' });
     await page.getByText(/Effectiveness/i).first().waitFor({ state: 'visible', timeout: 15_000 });
     await page.locator('.card svg').first().waitFor({ state: 'visible', timeout: 5_000 }).catch(() => undefined);
-    await sleep(1000);
+    await sleep(400);
     await page.screenshot({
       path: OUTPUTS.overview,
-      fullPage: false,
+      fullPage: true,
       type: 'png',
     });
 
