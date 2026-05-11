@@ -12,8 +12,8 @@
  *   cet test -- pytest tests/
  */
 
-import { spawn } from 'node:child_process';
 import { resolveDataDir, ensureInitialized } from '../config.js';
+import { spawnSafe } from '../util/spawn-safe.js';
 import { Storage, StorageError } from '../storage.js';
 import { collectTestOutcomes, type TestOutcomeRecord } from '../collectors/test-outcomes.js';
 import { correlateSession } from '../correlation/engine.js';
@@ -48,7 +48,7 @@ export async function handleTest(opts: TestOptions): Promise<void> {
   const stdoutChunks: string[] = [];
   const stderrChunks: string[] = [];
 
-  const child = spawn(executable, execArgs, {
+  const child = spawnSafe(executable, execArgs, {
     cwd,
     stdio: ['inherit', 'pipe', 'pipe'],
   });

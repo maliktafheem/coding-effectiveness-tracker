@@ -82,4 +82,46 @@ describe('cet test command privacy', () => {
     // Should contain [REDACTED] replacement
     expect(summary).toContain('[REDACTED]');
   });
+
+  const describeWin32 = process.platform === 'win32' ? describe : describe.skip;
+
+  describeWin32('Windows command resolution', () => {
+    it('resolves npm to npm.cmd when running test command', async () => {
+      const { handleTest } = await import('../src/commands/test.js');
+
+      const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => {
+        throw new Error('process.exit blocked');
+      }) as any);
+
+      try {
+        await handleTest({ dataDir: tempDir, args: ['npm', 'test'] });
+      } catch (e: any) {
+        expect(e.message).toBe('process.exit blocked');
+      } finally {
+        exitSpy.mockRestore();
+      }
+
+      expect(mockSpawn).toHaveBeenCalled();
+      expect(mockSpawn.mock.calls[0][0]).toBe('npm.cmd');
+    });
+  });
+
+  it('does not rewrite command with existing windows extension', async () => {
+    const { handleTest } = await import('../src/commands/test.js');
+
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => {
+      throw new Error('process.exit blocked');
+    }) as any);
+
+    try {
+      await handleTest({ dataDir: tempDir, args: ['custom-tool.cmd', '--version'] });
+    } catch (e: any) {
+      expect(e.message).toBe('process.exit blocked');
+    } finally {
+      exitSpy.mockRestore();
+    }
+
+    expect(mockSpawn).toHaveBeenCalled();
+    expect(mockSpawn.mock.calls[0][0]).toBe('custom-tool.cmd');
+  });
 });
