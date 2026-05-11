@@ -902,6 +902,7 @@ describe('Regression: filtered report test-confidence scope', () => {
   afterEach(() => { storage?.close(); safeCleanup(tempDir); });
 
   it('tool filter constrains test outcomes considered for test-confidence', () => {
+    const db = storage.db;
     // Add passing tests for project-alpha, failing for project-beta
     collectTestOutcomes(storage, [
       { command: 'npm test', passed: 20, failed: 0, skipped: 0, durationMs: 2000, runAt: '2026-04-28T09:20:00Z' },
@@ -909,6 +910,12 @@ describe('Regression: filtered report test-confidence scope', () => {
     collectTestOutcomes(storage, [
       { command: 'pytest', passed: 5, failed: 10, skipped: 0, durationMs: 3000, runAt: '2026-04-28T16:40:00Z' },
     ], 'project-beta');
+
+    // Link test outcomes to sessions via correlation
+    const alphaSessions = db.prepare("SELECT id FROM sessions WHERE project_id = 'project-alpha'").all() as { id: string }[];
+    const betaSessions = db.prepare("SELECT id FROM sessions WHERE project_id = 'project-beta'").all() as { id: string }[];
+    for (const s of alphaSessions) correlateSession(storage, s.id);
+    for (const s of betaSessions) correlateSession(storage, s.id);
 
     // codex sessions are in project-alpha, opencode in project-beta
     const codexScore = computeEffectivenessScore(storage, { toolId: 'codex' });
@@ -923,12 +930,17 @@ describe('Regression: filtered report test-confidence scope', () => {
   });
 
   it('date filter constrains test outcomes for test-confidence', () => {
+    const db = storage.db;
     collectTestOutcomes(storage, [
       { command: 'npm test', passed: 20, failed: 0, skipped: 0, durationMs: 2000, runAt: '2026-04-28T09:20:00Z' },
     ], 'project-alpha');
     collectTestOutcomes(storage, [
       { command: 'npm test', passed: 2, failed: 8, skipped: 0, durationMs: 3000, runAt: '2026-04-29T14:20:00Z' },
     ], 'project-alpha');
+
+    // Link test outcomes to sessions via correlation
+    const allSessions = db.prepare("SELECT id FROM sessions WHERE project_id = 'project-alpha'").all() as { id: string }[];
+    for (const s of allSessions) correlateSession(storage, s.id);
 
     const day1Score = computeEffectivenessScore(storage, { projectId: 'project-alpha', from: '2026-04-28', to: '2026-04-28' });
     const day1TestDim = day1Score.dimensions.find(d => d.name === 'test-confidence');
@@ -941,12 +953,19 @@ describe('Regression: filtered report test-confidence scope', () => {
   });
 
   it('unrelated tests outside filtered scope do not affect report', () => {
+    const db = storage.db;
     collectTestOutcomes(storage, [
       { command: 'pytest', passed: 0, failed: 50, skipped: 0, durationMs: 5000, runAt: '2026-04-28T16:40:00Z' },
     ], 'project-beta');
     collectTestOutcomes(storage, [
       { command: 'npm test', passed: 100, failed: 0, skipped: 0, durationMs: 2000, runAt: '2026-04-28T09:20:00Z' },
     ], 'project-alpha');
+
+    // Link test outcomes to sessions via correlation
+    const alphaSessions = db.prepare("SELECT id FROM sessions WHERE project_id = 'project-alpha'").all() as { id: string }[];
+    const betaSessions = db.prepare("SELECT id FROM sessions WHERE project_id = 'project-beta'").all() as { id: string }[];
+    for (const s of alphaSessions) correlateSession(storage, s.id);
+    for (const s of betaSessions) correlateSession(storage, s.id);
 
     const alphaScore = computeEffectivenessScore(storage, { projectId: 'project-alpha' });
     const alphaTestDim = alphaScore.dimensions.find(d => d.name === 'test-confidence');
@@ -961,12 +980,19 @@ describe('Regression: filtered report test-confidence scope', () => {
   });
 
   it('filtered report JSON test-confidence reflects only filtered scope', () => {
+    const db = storage.db;
     collectTestOutcomes(storage, [
       { command: 'npm test', passed: 15, failed: 0, skipped: 0, durationMs: 1500, runAt: '2026-04-28T09:30:00Z' },
     ], 'project-alpha');
     collectTestOutcomes(storage, [
       { command: 'jest', passed: 0, failed: 30, skipped: 0, durationMs: 4000, runAt: '2026-04-28T16:50:00Z' },
     ], 'project-beta');
+
+    // Link test outcomes to sessions via correlation
+    const alphaSessions = db.prepare("SELECT id FROM sessions WHERE project_id = 'project-alpha'").all() as { id: string }[];
+    const betaSessions = db.prepare("SELECT id FROM sessions WHERE project_id = 'project-beta'").all() as { id: string }[];
+    for (const s of alphaSessions) correlateSession(storage, s.id);
+    for (const s of betaSessions) correlateSession(storage, s.id);
 
     const alphaScore = computeEffectivenessScore(storage, { projectId: 'project-alpha' });
     const betaScore = computeEffectivenessScore(storage, { projectId: 'project-beta' });

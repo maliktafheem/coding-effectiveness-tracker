@@ -163,7 +163,7 @@ export function computeEffectivenessScore(
   }
 
   // ─── Dimension 3: Test Confidence ──────────────────────────────────────
-  const testDim = computeTestDimension(db, sessions, corrCounts, options, weights);
+  const testDim = computeTestDimension(db, sessions, corrCounts, weights);
   dimensions.push(testDim);
   if (!testDim.available) {
     missingInputs.push('Test outcome data not available - no test results linked to sessions.');
@@ -258,66 +258,35 @@ function computeTestDimension(
   db: Database.Database,
   sessions: Record<string, unknown>[],
   corrCounts: Map<string, Map<string, CorrEntry>>,
-  options: ScoreOptions,
   weights: ScoringWeights,
 ): ScoreDimension {
-  // When a --tool filter is active, test-confidence must be scoped to only
-  // those sessions. If no sessions match the tool filter, or matching sessions
-  // all lack a reliable project_id, test-confidence is unavailable rather than
-  // falling back to unrelated global test outcomes.
-  if (options.toolId && sessions.length === 0) {
+  const sessionIds = sessions.map(s => s.id as string);
+  if (sessionIds.length === 0) {
     return {
       name: 'test-confidence',
       value: 0,
       weight: weights['test-confidence'],
-      explanation: 'No sessions matched the tool filter - test confidence not available.',
+      explanation: 'No sessions matched the filter - test confidence not available.',
       available: false,
     };
   }
 
-  // Build filtered test_outcomes query that respects all active filters.
-  // When no explicit projectId filter is set but a toolId filter is active,
-  // derive the project scope from the filtered sessions so that test outcomes
-  // from unrelated projects do not affect the score.
-  let testQuery = 'SELECT * FROM test_outcomes';
-  const conditions: string[] = [];
-  const params: (string | number)[] = [];
-
-  if (options.projectId) {
-    conditions.push('project_id = ?');
-    params.push(options.projectId);
-  } else if (options.toolId && sessions.length > 0) {
-    // Derive project scope from the filtered sessions.
-    // Filter out null/empty project_ids to avoid unreliable scoping.
-    const projectIds = [...new Set(sessions.map(s => s.project_id as string).filter(Boolean))];
-    if (projectIds.length > 0) {
-      const placeholders = projectIds.map(() => '?').join(', ');
-      conditions.push('project_id IN (' + placeholders + ')');
-      params.push(...projectIds);
-    } else {
-      // All matching sessions have null/empty project_id.
-      // We cannot reliably scope test outcomes, so use an impossible
-      // condition to return zero results instead of falling back to
-      // unrelated global test outcomes.
-      conditions.push('1 = 0');
-    }
-  }
-  if (options.from) {
-    conditions.push('run_at >= ?');
-    params.push(options.from.length === 10 ? options.from + 'T00:00:00Z' : options.from);
-  }
-  if (options.to) {
-    conditions.push('run_at <= ?');
-    params.push(options.to.length === 10 ? options.to + 'T23:59:59Z' : options.to);
-  }
-  if (conditions.length > 0) {
-    testQuery += ' WHERE ' + conditions.join(' AND ');
-  }
-
-  const filteredTestOutcomes = db.prepare(testQuery).all(...params) as Record<string, unknown>[];
+  const placeholders = sessionIds.map(() => '?').join(',');
+  const filteredTestOutcomes = db.prepare(
+    `SELECT * FROM test_outcomes
+     WHERE session_id IN (${placeholders})
+        OR id IN (
+           SELECT target_id FROM correlations
+           WHERE correlation_type = 'test-outcome' AND session_id IN (${placeholders})
+        )`,
+  ).all(...sessionIds, ...sessionIds) as Record<string, unknown>[];
 
   if (filteredTestOutcomes.length === 0) {
-    return { name: 'test-confidence', value: 0, weight: weights['test-confidence'], explanation: 'No test outcome data available.', available: false };
+    return {
+      name: 'test-confidence', value: 0, weight: weights['test-confidence'],
+      explanation: 'No test outcomes linked to the filtered sessions.',
+      available: false,
+    };
   }
 
   let totalPassed = 0;
