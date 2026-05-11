@@ -708,6 +708,23 @@ describe('Report command', () => {
     expect(parsed.period).toBeDefined();
   });
 
+  it('report --json redacts legacy annotation notes on the CLI read path', async () => {
+    runCli(['init', '-d', tempDir]);
+    runCli(['import', '-d', tempDir, '--fixture', join(FIXTURES_DIR, 'correlation-sessions.json')]);
+    const { Storage } = await import('../src/storage.js');
+    const storage = Storage.open({ dataDir: tempDir });
+    // Pick any imported session; seed a raw-note row directly into the DB.
+    const sessionRow = storage.db.prepare('SELECT id FROM sessions LIMIT 1').get() as { id: string };
+    storage.db.prepare(
+      `INSERT INTO outcomes (id, session_id, outcome_type, score, label, note)
+       VALUES ('legacy-report-out-1', ?, 'manual', 0.9, 'good', ?)`
+    ).run(sessionRow.id, 'legacy note token=sk-proj-REPORTLEAKZZZZZZZZZZZZZZZZZZ');
+    storage.close();
+    const parsed = JSON.parse(runCli(['report', '-d', tempDir, '--json']).stdout);
+    const raw = JSON.stringify(parsed);
+    expect(raw).not.toContain('sk-proj-REPORTLEAKZZZZZZZZZZZZZZZZZZ');
+  });
+
   it('report JSON includes score dimensions and missingInputs', () => {
     runCli(['init', '-d', tempDir]);
     runCli(['import', '-d', tempDir, '--fixture', join(FIXTURES_DIR, 'correlation-sessions.json')]);

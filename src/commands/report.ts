@@ -8,6 +8,7 @@
 import { resolveDataDir, ensureInitialized } from '../config.js';
 import { Storage, StorageError } from '../storage.js';
 import { computeScore } from '../scoring/score-service.js';
+import { redactSecrets } from '../importers/privacy.js';
 
 interface ReportOptions {
   dataDir?: string;
@@ -127,13 +128,14 @@ export async function handleReport(opts: ReportOptions): Promise<void> {
         reasons: c.metadata_json ? JSON.parse(c.metadata_json as string).reasons : [],
       }));
 
-      // Attach outcomes
+      // Attach outcomes. Redact at read boundary: legacy rows from older
+      // versions may still contain unredacted content.
       const outcomes = db.prepare('SELECT * FROM outcomes WHERE session_id = ?').all(s.id) as Record<string, unknown>[];
       enriched.outcomes = outcomes.map((o) => ({
         type: o.outcome_type,
         label: o.label,
         score: o.score,
-        note: o.note,
+        note: o.note ? redactSecrets(o.note as string) : o.note,
       }));
 
       return enriched;
