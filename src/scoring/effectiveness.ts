@@ -20,7 +20,7 @@ interface CorrEntry { count: number; maxConfidence: number; totalConfidence: num
 /**
  * Load correlation counts with confidence details for a set of sessions.
  *
- * Uses SQLite's json_eval() to pass session IDs as a JSON array, avoiding
+ * Uses SQLite's json_each() to pass session IDs as a JSON array, avoiding
  * the SQLite 999-parameter IN limit and eliminating N+1 per-session queries.
  *
  * Returns Map<sessionId, Map<correlationType, CorrEntry>>.
