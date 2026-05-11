@@ -27,11 +27,35 @@
 
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { resolve, isAbsolute } from 'node:path';
+import { z } from 'zod';
 import { resolveDataDir, ensureInitialized } from '../config.js';
 import { Storage, StorageError } from '../storage.js';
 import { collectTestOutcomes, type TestOutcomeRecord } from '../collectors/test-outcomes.js';
 import { correlateSession } from '../correlation/engine.js';
 import { redactSecrets } from '../importers/privacy.js';
+
+const InlineOutcomeSchema = z.object({
+  passed: z.number().int().nonnegative(),
+  failed: z.number().int().nonnegative(),
+  skipped: z.number().int().nonnegative().default(0),
+  durationMs: z.number().int().nonnegative().default(0),
+  runAt: z.string().datetime({ offset: true }).optional(),
+  command: z.string().min(1),
+});
+
+const JsonOutcomeRecordSchema = z.object({
+  command: z.string().min(1),
+  passed: z.number().int().nonnegative(),
+  failed: z.number().int().nonnegative(),
+  skipped: z.number().int().nonnegative().optional().default(0),
+  durationMs: z.number().int().nonnegative().optional().default(0),
+  runAt: z.string().datetime({ offset: true }),
+  sessionId: z.string().optional(),
+  commitId: z.string().optional(),
+  rawOutputSummary: z.string().optional(),
+});
+
+const JsonOutcomeFileSchema = z.array(JsonOutcomeRecordSchema);
 
 interface TestOutcomeOptions {
   dataDir?: string;
@@ -109,55 +133,49 @@ export async function handleTestOutcome(opts: TestOutcomeOptions): Promise<void>
         process.exit(1);
       }
 
-      if (!Array.isArray(parsed)) {
-        console.error('Error: Outcome file must contain a JSON array of outcome records.');
-        console.error('Expected format: [{"command": "npm test", "passed": 10, "failed": 0, ...}]');
+      const fileResult = JsonOutcomeFileSchema.safeParse(parsed);
+      if (!fileResult.success) {
+        for (const issue of fileResult.error.issues) {
+          console.error('Error: ' + issue.path.join('.') + ' — ' + issue.message);
+        }
         process.exit(1);
       }
 
-      // Validate and normalize records
-      for (let i = 0; i < parsed.length; i++) {
-        const record = parsed[i] as Record<string, unknown>;
-        if (!record.command || typeof record.command !== 'string') {
-          console.error('Error: Record at index ' + i + ' missing required "command" field.');
-          process.exit(1);
-        }
-        if (typeof record.passed !== 'number' || typeof record.failed !== 'number') {
-          console.error('Error: Record at index ' + i + ' must have numeric "passed" and "failed" fields.');
-          process.exit(1);
-        }
-        if (!record.runAt || typeof record.runAt !== 'string') {
-          console.error('Error: Record at index ' + i + ' missing required "runAt" datetime field.');
-          process.exit(1);
-        }
-
+      for (const record of fileResult.data) {
         outcomes.push({
-          command: record.command as string,
-          passed: record.passed as number,
-          failed: record.failed as number,
-          skipped: typeof record.skipped === 'number' ? record.skipped as number : 0,
-          durationMs: typeof record.durationMs === 'number' ? record.durationMs as number : 0,
-          runAt: record.runAt as string,
-          sessionId: typeof record.sessionId === 'string' ? record.sessionId as string : undefined,
-          commitId: typeof record.commitId === 'string' ? record.commitId as string : undefined,
-          rawOutputSummary: typeof record.rawOutputSummary === 'string' && record.rawOutputSummary
-            ? redactSecrets(record.rawOutputSummary as string)
+          command: record.command,
+          passed: record.passed,
+          failed: record.failed,
+          skipped: record.skipped,
+          durationMs: record.durationMs,
+          runAt: record.runAt,
+          sessionId: record.sessionId,
+          commitId: record.commitId,
+          rawOutputSummary: record.rawOutputSummary
+            ? redactSecrets(record.rawOutputSummary)
             : undefined,
         });
       }
     } else if (opts.command) {
       // Mode 2: Single inline outcome
-      const passed = opts.passed ? parseInt(opts.passed, 10) : 0;
-      const failed = opts.failed ? parseInt(opts.failed, 10) : 0;
-      const skipped = opts.skipped ? parseInt(opts.skipped, 10) : 0;
-      const durationMs = opts.duration ? parseInt(opts.duration, 10) : 0;
+      const inlineResult = InlineOutcomeSchema.safeParse({
+        passed: opts.passed !== undefined ? Number(opts.passed) : 0,
+        failed: opts.failed !== undefined ? Number(opts.failed) : 0,
+        skipped: opts.skipped !== undefined ? Number(opts.skipped) : 0,
+        durationMs: opts.duration !== undefined ? Number(opts.duration) : 0,
+        runAt: opts.runAt,
+        command: opts.command,
+      });
 
-      if (isNaN(passed) || isNaN(failed) || isNaN(skipped) || isNaN(durationMs)) {
-        console.error('Error: passed, failed, skipped, and duration must be valid numbers.');
+      if (!inlineResult.success) {
+        for (const issue of inlineResult.error.issues) {
+          console.error('Error: ' + issue.path.join('.') + ' — ' + issue.message);
+        }
         process.exit(1);
       }
 
-      const runAt = opts.runAt || new Date().toISOString();
+      const { passed, failed, skipped, durationMs, runAt } = inlineResult.data;
+      const effectiveRunAt = runAt || new Date().toISOString();
 
       // Resolve session ID if provided by external_id
       const sessionId = opts.session;
@@ -187,7 +205,7 @@ export async function handleTestOutcome(opts: TestOutcomeOptions): Promise<void>
         failed,
         skipped,
         durationMs,
-        runAt,
+        runAt: effectiveRunAt,
         sessionId,
         commitId,
       });
