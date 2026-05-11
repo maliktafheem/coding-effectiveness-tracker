@@ -349,6 +349,27 @@ describe('Correlation confidence scoring', () => {
     expect(manualCorr.length).toBeGreaterThan(0);
   });
 
+  it('does not delete pr-outcome correlations during re-correlation', () => {
+    const db = storage.db;
+    const session = db.prepare("SELECT * FROM sessions WHERE external_id = 'corr-session-001'").get() as Record<string, unknown>;
+    expect(session).toBeTruthy();
+    const sessionId = session.id as string;
+
+    // Seed a pr-outcome correlation (owned by sync-pr, not the correlation engine)
+    db.prepare(
+      `INSERT INTO correlations (id, session_id, correlation_type, target_id, confidence, metadata_json)
+       VALUES ('pr-seed-1', ?, 'pr-outcome', '42', 1, '{}')`
+    ).run(sessionId);
+
+    // Re-correlation should not wipe externally-owned types
+    correlateSession(storage, sessionId);
+
+    const remaining = db
+      .prepare(`SELECT correlation_type FROM correlations WHERE session_id = ?`)
+      .all(sessionId) as { correlation_type: string }[];
+    expect(remaining.some(r => r.correlation_type === 'pr-outcome')).toBe(true);
+  });
+
   it('uncorrelated session has no git correlations for different project', () => {
     const commits = collectGitSignals(repoDir);
     storeGitSignals(storage, commits, 'project-alpha');

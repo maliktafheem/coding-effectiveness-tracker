@@ -53,8 +53,13 @@ export function correlateSession(
 
   const results: CorrelationResult[] = [];
 
-  // Clear existing correlations for this session to allow re-correlation
-  db.prepare('DELETE FROM correlations WHERE session_id = ?').run(sessionId);
+  // Re-correlation only clears types this engine owns.
+  // pr-outcome (owned by sync-pr) and any future externally-owned types are preserved.
+  db.prepare(
+    `DELETE FROM correlations
+     WHERE session_id = ?
+       AND correlation_type IN ('git-commit', 'test-outcome', 'manual-outcome')`
+  ).run(sessionId);
 
   // 1. Correlate with Git commits
   const gitCorrelations = correlateWithGitCommits(storage, session, options);
