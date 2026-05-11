@@ -7,8 +7,9 @@
 
 import type { Storage } from '../storage.js';
 import { computeEffectivenessScore } from '../scoring/effectiveness.js';
-import { loadScoringConfig, DEFAULT_WEIGHTS, DEFAULT_THRESHOLDS } from '../scoring/config.js';
+import { DEFAULT_WEIGHTS, DEFAULT_THRESHOLDS } from '../scoring/config.js';
 import type { ScoringConfig } from '../scoring/config.js';
+import { loadFullConfig } from '../scoring/score-service.js';
 
 export interface TrendPoint {
   weekStart: string;
@@ -33,7 +34,7 @@ export function computeTrends(storage: Storage, projectId?: string, dataDir?: st
   const db = storage.db;
 
   // Load scoring config so every per-window call gets the same weights + thresholds
-  const cfg: ScoringConfig = dataDir ? loadScoringConfig(dataDir) : { weights: { ...DEFAULT_WEIGHTS }, thresholds: { ...DEFAULT_THRESHOLDS } };
+  const cfg: ScoringConfig = dataDir ? loadFullConfig(dataDir) : { weights: { ...DEFAULT_WEIGHTS }, thresholds: { ...DEFAULT_THRESHOLDS } };
 
   let query = "SELECT * FROM sessions WHERE started_at IS NOT NULL";
   const params: string[] = [];
