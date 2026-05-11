@@ -26,6 +26,7 @@ import type {
 import { getSessionDiffs } from '../analytics/diff-service.js';
 import { getAllResults, getResult } from '../analytics/prompt-quality/service.js';
 import { deriveShipStatus, type ShipStatus } from '../correlation/ship-status.js';
+import { redactSecrets } from '../importers/privacy.js';
 
 const VALID_OUTCOMES = new Set([
   'good','accepted','merged','shipped','ok','neutral','partial',
@@ -509,7 +510,7 @@ export function registerRoutes(app: FastifyInstance, opts: ServerOptions): void 
       const session = db.prepare('SELECT id FROM sessions WHERE id = ?').get(id);
       if (!session) return reply.code(404).send({ error: 'Session not found' });
       const annId = randomUUID();
-      const note = body.note ?? null;
+      const note = body.note ? redactSecrets(body.note) : null;
       const score = body.score ?? null;
       const tagsJson = body.tags ? JSON.stringify(body.tags) : null;
       db.prepare(
@@ -556,7 +557,9 @@ export function registerRoutes(app: FastifyInstance, opts: ServerOptions): void 
 
       const outcome = body.outcome ? body.outcome.toLowerCase().trim() : (existing.label as string);
       const score = body.score ?? (existing.score as number | null);
-      const note = body.note ?? (existing.note as string | null);
+      const note = body.note !== undefined
+        ? (body.note ? redactSecrets(body.note) : null)
+        : (existing.note as string | null);
       db.prepare('UPDATE outcomes SET label = ?, score = ?, note = ?, updated_at = datetime(\'now\') WHERE id = ?')
         .run(outcome, score, note, id);
       return { id, sessionId: existing.session_id as string, outcome, score, note };
@@ -574,6 +577,7 @@ export function registerRoutes(app: FastifyInstance, opts: ServerOptions): void 
       return generateJsonExport(storage, {
         toolId: filters.tool, projectId: filters.project,
         from: filters.from, to: filters.to, raw: filters.raw,
+        dataDir,
       });
     } finally { storage.close(); }
   });
@@ -589,6 +593,7 @@ export function registerRoutes(app: FastifyInstance, opts: ServerOptions): void 
       const md = generateMarkdownExport(storage, {
         toolId: filters.tool, projectId: filters.project,
         from: filters.from, to: filters.to, raw: filters.raw,
+        dataDir,
       });
       return reply.type('text/markdown').send(md);
     } finally { storage.close(); }

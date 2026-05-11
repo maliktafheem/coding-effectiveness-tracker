@@ -428,6 +428,61 @@ describe('API Server', () => {
     });
   });
 
+  describe('Annotation redaction on API write path', () => {
+    it('redacts secrets in POST annotation note before DB write', async () => {
+      const { Storage } = await import('../src/storage.js');
+      const s = Storage.open({ dataDir });
+      seedFixtures(s.dbPath);
+      s.close();
+      server = await createApiServer({ dataDir, port: PORT });
+      const canary = 'CANARY_LEAK_TEST_MARKER_POST_NOTE token=sk-proj-ABCDEF1234567890';
+      const res = await server.inject({
+        method: 'POST', url: '/api/sessions/sess1/annotations',
+        payload: JSON.stringify({ outcome: 'good', note: canary }),
+        headers: { 'content-type': 'application/json', 'origin': 'http://127.0.0.1:' + PORT },
+      });
+      expect(res.statusCode).toBe(201);
+      const body = JSON.parse(res.payload);
+      expect(body.note).not.toContain('sk-proj-ABCDEF1234567890');
+
+      const s2 = Storage.open({ dataDir });
+      const row = s2.db.prepare(
+        'SELECT note FROM outcomes WHERE id = ?'
+      ).get(body.id) as { note: string };
+      s2.close();
+      expect(row.note).not.toContain('sk-proj-ABCDEF1234567890');
+    });
+
+    it('redacts secrets in PATCH annotation note before DB write', async () => {
+      const { Storage } = await import('../src/storage.js');
+      const s = Storage.open({ dataDir });
+      seedFixtures(s.dbPath);
+      s.close();
+      server = await createApiServer({ dataDir, port: PORT });
+
+      const createRes = await server.inject({
+        method: 'POST', url: '/api/sessions/sess1/annotations',
+        payload: JSON.stringify({ outcome: 'good', note: 'initial' }),
+        headers: { 'content-type': 'application/json', 'origin': 'http://127.0.0.1:' + PORT },
+      });
+      const annId = JSON.parse(createRes.payload).id;
+
+      const patchRes = await server.inject({
+        method: 'PATCH', url: '/api/annotations/' + annId,
+        payload: JSON.stringify({ note: 'updated with token=sk-proj-ZZZZZZZZZZZZZZZZZZZZZZ' }),
+        headers: { 'content-type': 'application/json', 'origin': 'http://127.0.0.1:' + PORT },
+      });
+      expect(patchRes.statusCode).toBe(200);
+      const patched = JSON.parse(patchRes.payload);
+      expect(patched.note).not.toContain('sk-proj-ZZZZZZZZZZZZZZZZZZZZZZ');
+
+      const s2 = Storage.open({ dataDir });
+      const row = s2.db.prepare('SELECT note FROM outcomes WHERE id = ?').get(annId) as { note: string };
+      s2.close();
+      expect(row.note).not.toContain('sk-proj-ZZZZZZZZZZZZZZZZZZZZZZ');
+    });
+  });
+
   describe('Error handler responses', () => {
     it('returns actual error name for 4xx, not "Internal server error"', async () => {
       const { Storage } = await import('../src/storage.js');

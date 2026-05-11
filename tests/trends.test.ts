@@ -182,3 +182,27 @@ describe('computeTrends: project filter', () => {
     expect(trendsAll.points[0].sessionCount).toBe(3);
   });
 });
+
+describe('computeTrends: SQL safety', () => {
+  let tempDir: string;
+  let storage: Storage;
+
+  beforeEach(() => {
+    tempDir = mkdtempSync(join(tmpdir(), 'cet-trends-sql-safety-'));
+    storage = createTestStorage(tempDir);
+  });
+  afterEach(() => { storage?.close(); safeCleanup(tempDir); });
+
+  it('survives session IDs containing single quotes', () => {
+    const quotedSessionId = "sess-has-quote-' -in-it";
+    insertSession(storage, quotedSessionId, 'tr-proj-a', '2026-04-06T10:00:00Z', '2026-04-06T11:00:00Z');
+    insertTestOutcome(storage, 'quoted-outcome-1', quotedSessionId, 2, 1);
+
+    expect(() => computeTrends(storage)).not.toThrow();
+
+    const trends = computeTrends(storage);
+    expect(trends.points).toHaveLength(1);
+    expect(trends.points[0].totalTestsPassed).toBe(2);
+    expect(trends.points[0].totalTestsFailed).toBe(1);
+  });
+});

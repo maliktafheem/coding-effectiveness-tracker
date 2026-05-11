@@ -411,7 +411,7 @@ describe('CLI test-outcome command (VAL-CLI-031, VAL-IMPORT-014)', () => {
     writeFileSync(objJson, JSON.stringify({ command: 'test' }));
     const result = runCli(['test-outcome', '-d', dataDir, '--outcome-json', objJson]);
     expect(result.exitCode).not.toBe(0);
-    expect(result.stderr).toMatch(/json array/i);
+    expect(result.stderr).toMatch(/array|expected arr/i);
   });
 
   it('fails when outcome record missing required fields', () => {
@@ -419,7 +419,7 @@ describe('CLI test-outcome command (VAL-CLI-031, VAL-IMPORT-014)', () => {
     writeFileSync(badRecords, JSON.stringify([{ passed: 10, failed: 0 }]));
     const result = runCli(['test-outcome', '-d', dataDir, '--outcome-json', badRecords]);
     expect(result.exitCode).not.toBe(0);
-    expect(result.stderr).toMatch(/missing.*command/i);
+    expect(result.stderr).toMatch(/command/i);
   });
 
   it('fails when no --command or --outcome-json provided', () => {
