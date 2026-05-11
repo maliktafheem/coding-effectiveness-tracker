@@ -384,7 +384,9 @@ export function registerRoutes(app: FastifyInstance, opts: ServerOptions): void 
         type: o.outcome_type as string,
         label: o.label as string,
         score: (o.score as number | null) ?? null,
-        note: (o.note as string | null) ?? null,
+        // Defence-in-depth: legacy rows from older versions may hold unredacted content;
+        // redact at read boundary so API responses never expose secrets.
+        note: o.note ? redactSecrets(o.note as string) : null,
       }));
       let reworkCount = 0;
       let sessionMetadata: Record<string, unknown> | null = null;

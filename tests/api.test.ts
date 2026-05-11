@@ -193,6 +193,25 @@ describe('API Server', () => {
       expect(body.outcomes.length).toBe(1);
     });
 
+    it('redacts legacy unredacted notes on read path', async () => {
+      const { Storage } = await import('../src/storage.js');
+      const s = Storage.open({ dataDir });
+      seedFixtures(s.dbPath);
+      // Seed a legacy outcome row with raw secret directly into DB (bypass API redaction).
+      s.db.prepare(
+        `INSERT INTO outcomes (id, session_id, outcome_type, score, label, note)
+         VALUES ('legacy-out-1', 'sess1', 'manual', 0.8, 'good', ?)`
+      ).run('legacy note token=sk-proj-LEAK_THIS_ZZZZZZZZZZZZ');
+      s.close();
+      server = await createApiServer({ dataDir, port: PORT });
+      const res = await server.inject({ method: 'GET', url: '/api/sessions/sess1' });
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.payload);
+      const legacy = body.outcomes.find((o: { id: string }) => o.id === 'legacy-out-1');
+      expect(legacy).toBeTruthy();
+      expect(legacy.note).not.toContain('sk-proj-LEAK_THIS_ZZZZZZZZZZZZ');
+    });
+
     it('returns empty correlations for uncorrelated session', async () => {
       const { Storage } = await import('../src/storage.js');
       const s = Storage.open({ dataDir });
