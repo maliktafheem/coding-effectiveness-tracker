@@ -13,45 +13,53 @@ import type { Storage } from '../storage.js';
 import type { ScoringWeights, ScoringThresholds } from './config.js';
 import { DEFAULT_WEIGHTS, DEFAULT_THRESHOLDS } from './config.js';
 
+const LOW_CONF_THRESHOLD = 0.3;
+
+interface CorrEntry { count: number; maxConfidence: number; totalConfidence: number; }
+
 /**
- * Load correlation counts for a set of sessions in a single aggregate query.
+ * Load correlation counts with confidence details for a set of sessions.
  *
- * Uses SQLite's json_each() to pass session IDs as a JSON array, avoiding
+ * Uses SQLite's json_eval() to pass session IDs as a JSON array, avoiding
  * the SQLite 999-parameter IN limit and eliminating N+1 per-session queries.
  *
- * Returns Map<sessionId, Map<correlationType, count>>.
+ * Returns Map<sessionId, Map<correlationType, CorrEntry>>.
  */
 function loadCorrelationCounts(
   db: Database.Database,
   sessionIds: string[],
   types: string[],
-): Map<string, Map<string, number>> {
-  const result = new Map<string, Map<string, number>>();
+): Map<string, Map<string, CorrEntry>> {
+  const result = new Map<string, Map<string, CorrEntry>>();
   if (sessionIds.length === 0 || types.length === 0) return result;
 
   // Pre-populate so callers can rely on every sessionId being present
   for (const sid of sessionIds) {
-    const inner = new Map<string, number>();
-    for (const t of types) inner.set(t, 0);
+    const inner = new Map<string, CorrEntry>();
+    for (const t of types) inner.set(t, { count: 0, maxConfidence: 0, totalConfidence: 0 });
     result.set(sid, inner);
   }
 
   const typePlaceholders = types.map(() => '?').join(', ');
   const sql =
-    `SELECT session_id, correlation_type, count(*) as cnt ` +
+    `SELECT session_id, correlation_type, confidence ` +
     `FROM correlations ` +
     `WHERE session_id IN (SELECT value FROM json_each(?)) ` +
-    `AND correlation_type IN (${typePlaceholders}) ` +
-    `GROUP BY session_id, correlation_type`;
+    `AND correlation_type IN (${typePlaceholders})`;
 
   const rows = db.prepare(sql).all(
     JSON.stringify(sessionIds),
     ...types,
-  ) as { session_id: string; correlation_type: string; cnt: number }[];
+  ) as { session_id: string; correlation_type: string; confidence: number }[];
 
   for (const row of rows) {
     const inner = result.get(row.session_id);
-    if (inner) inner.set(row.correlation_type, row.cnt);
+    if (!inner) continue;
+    const conf = row.confidence ?? 0;
+    const cur = inner.get(row.correlation_type)!;
+    cur.count += 1;
+    cur.totalConfidence += conf;
+    if (conf > cur.maxConfidence) cur.maxConfidence = conf;
   }
 
   return result;
@@ -217,28 +225,31 @@ export function computeEffectivenessScore(
 
 function computeGitDimension(
   sessions: Record<string, unknown>[],
-  corrCounts: Map<string, Map<string, number>>,
+  corrCounts: Map<string, Map<string, CorrEntry>>,
   weights: ScoringWeights,
 ): ScoreDimension {
   if (sessions.length === 0) {
     return { name: 'git-correlation', value: 0, weight: weights['git-correlation'], explanation: 'No sessions to correlate with git.', available: false };
   }
 
-  let correlatedCount = 0;
+  let confidenceSum = 0;
+  let qualifying = 0;
   for (const s of sessions) {
-    const cnt = corrCounts.get(s.id as string)?.get('git-commit') ?? 0;
-    if (cnt > 0) correlatedCount++;
+    const entry = corrCounts.get(s.id as string)?.get('git-commit');
+    if (!entry || entry.maxConfidence < LOW_CONF_THRESHOLD) continue;
+    confidenceSum += Math.min(entry.maxConfidence, 1);
+    qualifying++;
   }
 
-  const ratio = correlatedCount / sessions.length;
+  const ratio = sessions.length > 0 ? confidenceSum / sessions.length : 0;
   const score = Math.min(ratio, 1);
-  const hasData = correlatedCount > 0;
+  const hasData = qualifying > 0;
 
   return {
     name: 'git-correlation',
     value: score,
     weight: weights['git-correlation'],
-    explanation: `${correlatedCount} of ${sessions.length} sessions correlated with git commits (${Math.round(score * 100)}%).`,
+    explanation: `${qualifying} of ${sessions.length} sessions correlated with git commits (confidence-weighted: ${Math.round(score * 100)}%).`,
     available: hasData,
   };
 }
@@ -246,7 +257,7 @@ function computeGitDimension(
 function computeTestDimension(
   db: Database.Database,
   sessions: Record<string, unknown>[],
-  corrCounts: Map<string, Map<string, number>>,
+  corrCounts: Map<string, Map<string, CorrEntry>>,
   options: ScoreOptions,
   weights: ScoringWeights,
 ): ScoreDimension {
@@ -319,12 +330,15 @@ function computeTestDimension(
   const total = totalPassed + totalFailed;
   const passRate = total > 0 ? totalPassed / total : 0;
 
-  let correlatedWithTests = 0;
+  let testConfidenceSum = 0;
+  let testQualifying = 0;
   for (const s of sessions) {
-    const cnt = corrCounts.get(s.id as string)?.get('test-outcome') ?? 0;
-    if (cnt > 0) correlatedWithTests++;
+    const entry = corrCounts.get(s.id as string)?.get('test-outcome');
+    if (!entry || entry.maxConfidence < LOW_CONF_THRESHOLD) continue;
+    testConfidenceSum += Math.min(entry.maxConfidence, 1);
+    testQualifying++;
   }
-  const correlationRatio = sessions.length > 0 ? correlatedWithTests / sessions.length : 0;
+  const correlationRatio = sessions.length > 0 ? testConfidenceSum / sessions.length : 0;
 
   const score = (passRate * 0.6) + (correlationRatio * 0.4);
 
@@ -332,7 +346,7 @@ function computeTestDimension(
     name: 'test-confidence',
     value: Math.round(score * 1000) / 1000,
     weight: weights['test-confidence'],
-    explanation: 'Test pass rate: ' + Math.round(passRate * 100) + '% (' + totalPassed + '/' + total + ' passed). ' + correlatedWithTests + ' sessions linked to test outcomes.',
+    explanation: 'Test pass rate: ' + Math.round(passRate * 100) + '% (' + totalPassed + '/' + total + ' passed). ' + testQualifying + ' sessions linked to test outcomes.',
     available: true,
   };
 }

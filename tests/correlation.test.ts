@@ -474,6 +474,55 @@ describe('Balanced effectiveness scoring', () => {
     expect(codexScore.sessionCount).toBeGreaterThanOrEqual(1);
     expect(codexScore.sessionCount).toBeLessThanOrEqual(allScore.sessionCount);
   });
+
+  it('git dimension downweights low-confidence correlations', () => {
+    const t = mkdtempSync(join(tmpdir(), 'cet-conf-low-'));
+    try {
+      const s = createTestStorage(t);
+      const db = s.db;
+      db.prepare(
+        `INSERT INTO sessions (id, external_id, source_tool_id, project_id, started_at, ended_at, duration_ms, summary)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      ).run('t3-low-sess', 't3-low-ext', 'codex', 'project-alpha',
+            '2026-04-28T09:00:00Z', '2026-04-28T09:45:00Z', 2700000, 'Low conf test');
+      db.prepare(
+        `INSERT INTO correlations (id, session_id, correlation_type, target_id, confidence, metadata_json)
+         VALUES (?, ?, 'git-commit', ?, ?, '{}')`
+      ).run('t3-low-corr', 't3-low-sess', 't3-low-target', 0.2);
+
+      const result = computeEffectivenessScore(s, { projectId: 'project-alpha' });
+      const git = result.dimensions.find(d => d.name === 'git-correlation')!;
+      // 0.2 below 0.3 threshold -> dim unavailable or value 0
+      expect(git.value).toBeLessThan(0.3);
+      s.close();
+    } finally {
+      safeCleanup(t);
+    }
+  });
+
+  it('git dimension credits high-confidence correlations fully', () => {
+    const t = mkdtempSync(join(tmpdir(), 'cet-conf-high-'));
+    try {
+      const s = createTestStorage(t);
+      const db = s.db;
+      db.prepare(
+        `INSERT INTO sessions (id, external_id, source_tool_id, project_id, started_at, ended_at, duration_ms, summary)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      ).run('t3-high-sess', 't3-high-ext', 'codex', 'project-alpha',
+            '2026-04-28T09:00:00Z', '2026-04-28T09:45:00Z', 2700000, 'High conf test');
+      db.prepare(
+        `INSERT INTO correlations (id, session_id, correlation_type, target_id, confidence, metadata_json)
+         VALUES (?, ?, 'git-commit', ?, ?, '{}')`
+      ).run('t3-high-corr', 't3-high-sess', 't3-high-target', 0.95);
+
+      const result = computeEffectivenessScore(s, { projectId: 'project-alpha' });
+      const git = result.dimensions.find(d => d.name === 'git-correlation')!;
+      expect(git.value).toBeGreaterThanOrEqual(0.9);
+      s.close();
+    } finally {
+      safeCleanup(t);
+    }
+  });
 });
 
 // ─── Project Separation (VAL-PROJ-001, VAL-PROJ-002) ──────────────────────────
