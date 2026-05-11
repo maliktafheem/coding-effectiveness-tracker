@@ -107,7 +107,7 @@ export async function handleAnnotate(opts: AnnotateOptions): Promise<void> {
     console.log(`Annotation recorded for session ${session.external_id} (${session.source_tool_id}):`);
     console.log(`  Outcome: ${outcomeLabel}`);
     if (score !== null) console.log(`  Score: ${score}`);
-    if (opts.note) console.log(`  Note: ${opts.note}`);
+    if (opts.note) console.log(`  Note: ${redactSecrets(opts.note)}`);
   } finally {
     storage?.close();
   }
