@@ -24,7 +24,9 @@ jobs:
       - run: npm run build
 
       - name: Pack tarball
-        run: npm pack --pack-destination ./artifact
+        run: |
+          mkdir -p ./artifact
+          npm pack --pack-destination ./artifact
 
       - name: Install tarball in scratch project
         run: |
