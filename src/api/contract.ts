@@ -26,6 +26,8 @@ export interface ScoreContract {
   aggregate: number;
   dimensions: ScoreDimensionContract[];
   missingInputs: string[];
+  dataCompleteness: number;
+  evidenceLevel: 'insufficient' | 'partial' | 'strong';
 }
 
 export interface DateRange {

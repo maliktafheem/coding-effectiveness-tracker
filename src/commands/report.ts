@@ -7,8 +7,8 @@
 
 import { resolveDataDir, ensureInitialized } from '../config.js';
 import { Storage, StorageError } from '../storage.js';
-import { computeEffectivenessScore } from '../scoring/effectiveness.js';
-import { loadScoringConfig } from '../scoring/config.js';
+import { computeScore } from '../scoring/score-service.js';
+import { redactSecrets } from '../importers/privacy.js';
 
 interface ReportOptions {
   dataDir?: string;
@@ -64,7 +64,7 @@ export async function handleReport(opts: ReportOptions): Promise<void> {
     if (sessions.length === 0) {
       if (opts.json) {
         console.log(JSON.stringify({
-          score: { aggregate: 0, dimensions: [], missingInputs: ['No sessions available. Run cet setup to get started.'] },
+          score: { aggregate: 0, dimensions: [], missingInputs: ['No sessions available. Run cet setup to get started.'], dataCompleteness: 0, evidenceLevel: 'insufficient' },
           sessions: [],
           sources: [],
           period: { from: opts.from || null, to: opts.to || null },
@@ -83,14 +83,12 @@ export async function handleReport(opts: ReportOptions): Promise<void> {
     }
 
     // Compute effectiveness score with user config
-    const scoringConfig = loadScoringConfig(opts.dataDir);
-    const score = computeEffectivenessScore(storage, {
+    const score = computeScore(storage, {
+      dataDir,
       projectId: opts.project,
       toolId: opts.tool,
       from: opts.from,
       to: opts.to,
-      weights: scoringConfig.weights,
-      thresholds: scoringConfig.thresholds,
     });
 
     // Gather source tools
@@ -130,13 +128,14 @@ export async function handleReport(opts: ReportOptions): Promise<void> {
         reasons: c.metadata_json ? JSON.parse(c.metadata_json as string).reasons : [],
       }));
 
-      // Attach outcomes
+      // Attach outcomes. Redact at read boundary: legacy rows from older
+      // versions may still contain unredacted content.
       const outcomes = db.prepare('SELECT * FROM outcomes WHERE session_id = ?').all(s.id) as Record<string, unknown>[];
       enriched.outcomes = outcomes.map((o) => ({
         type: o.outcome_type,
         label: o.label,
         score: o.score,
-        note: o.note,
+        note: o.note ? redactSecrets(o.note as string) : o.note,
       }));
 
       return enriched;
@@ -148,6 +147,8 @@ export async function handleReport(opts: ReportOptions): Promise<void> {
           aggregate: score.aggregate,
           dimensions: score.dimensions,
           missingInputs: score.missingInputs,
+          dataCompleteness: score.dataCompleteness,
+          evidenceLevel: score.evidenceLevel,
         },
         sessions: enrichedSessions,
         sources,
@@ -172,6 +173,7 @@ export async function handleReport(opts: ReportOptions): Promise<void> {
       console.log('');
       console.log('  ── Effectiveness Score ──────────────────────');
       console.log(`  Aggregate: ${Math.round(score.aggregate * 100)}%`);
+      console.log(`  Evidence: ${score.evidenceLevel} (${Math.round(score.dataCompleteness * 100)}% completeness)`);
       console.log('');
       for (const dim of score.dimensions) {
         const pct = Math.round(dim.value * 100);

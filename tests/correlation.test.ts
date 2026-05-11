@@ -349,6 +349,72 @@ describe('Correlation confidence scoring', () => {
     expect(manualCorr.length).toBeGreaterThan(0);
   });
 
+  it('does not delete pr-outcome correlations during re-correlation', () => {
+    const db = storage.db;
+    const session = db.prepare("SELECT * FROM sessions WHERE external_id = 'corr-session-001'").get() as Record<string, unknown>;
+    expect(session).toBeTruthy();
+    const sessionId = session.id as string;
+
+    // Seed a pr-outcome correlation (owned by sync-pr, not the correlation engine)
+    db.prepare(
+      `INSERT INTO correlations (id, session_id, correlation_type, target_id, confidence, metadata_json)
+       VALUES ('pr-seed-1', ?, 'pr-outcome', '42', 1, '{}')`
+    ).run(sessionId);
+
+    // Re-correlation should not wipe externally-owned types
+    correlateSession(storage, sessionId);
+
+    const remaining = db
+      .prepare(`SELECT correlation_type FROM correlations WHERE session_id = ?`)
+      .all(sessionId) as { correlation_type: string }[];
+    expect(remaining.some(r => r.correlation_type === 'pr-outcome')).toBe(true);
+  });
+
+  it('does not apply branch-bonus when all commits share a default integration branch', () => {
+    const db = storage.db;
+    const sessionId = 'test-no-bonus-master';
+    db.prepare(
+      `INSERT INTO sessions (id, external_id, source_tool_id, project_id, started_at, ended_at, duration_ms, summary)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(sessionId, 'test-no-bonus-master-ext', 'codex', 'project-alpha',
+          '2026-04-28T09:00:00Z', '2026-04-28T09:45:00Z', 2700000, 'Test no bonus master');
+    db.prepare(
+      `INSERT INTO git_commits (id, hash, short_hash, message, author, authored_at, branch, project_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run('c1', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'aaaaaaa', 'feat: test 1', 'Test', '2026-04-28T09:15:00Z', 'master', 'project-alpha');
+    db.prepare(
+      `INSERT INTO git_commits (id, hash, short_hash, message, author, authored_at, branch, project_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run('c2', 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', 'bbbbbbb', 'feat: test 2', 'Test', '2026-04-28T09:30:00Z', 'master', 'project-alpha');
+
+    const results = correlateSession(storage, sessionId);
+    for (const r of results) {
+      expect(r.reasons.join(' ')).not.toMatch(/same.*branch.*master/i);
+    }
+  });
+
+  it('applies branch-bonus when commits share a non-default feature branch', () => {
+    const db = storage.db;
+    const sessionId = 'test-bonus-feature';
+    db.prepare(
+      `INSERT INTO sessions (id, external_id, source_tool_id, project_id, started_at, ended_at, duration_ms, summary)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(sessionId, 'test-bonus-feature-ext', 'codex', 'project-alpha',
+          '2026-04-28T09:00:00Z', '2026-04-28T09:45:00Z', 2700000, 'Test bonus feature');
+    db.prepare(
+      `INSERT INTO git_commits (id, hash, short_hash, message, author, authored_at, branch, project_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run('c3', 'cccccccccccccccccccccccccccccccccccccccc', 'ccccccc', 'feat: payment 1', 'Test', '2026-04-28T09:15:00Z', 'feat/payments', 'project-alpha');
+    db.prepare(
+      `INSERT INTO git_commits (id, hash, short_hash, message, author, authored_at, branch, project_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run('c4', 'dddddddddddddddddddddddddddddddddddddddd', 'ddddddd', 'feat: payment 2', 'Test', '2026-04-28T09:30:00Z', 'feat/payments', 'project-alpha');
+
+    const results = correlateSession(storage, sessionId);
+    const hasBonus = results.some(r => r.reasons.some(x => x.includes('feature branch')));
+    expect(hasBonus).toBe(true);
+  });
+
   it('uncorrelated session has no git correlations for different project', () => {
     const commits = collectGitSignals(repoDir);
     storeGitSignals(storage, commits, 'project-alpha');
@@ -452,6 +518,55 @@ describe('Balanced effectiveness scoring', () => {
     const allScore = computeEffectivenessScore(storage, {});
     expect(codexScore.sessionCount).toBeGreaterThanOrEqual(1);
     expect(codexScore.sessionCount).toBeLessThanOrEqual(allScore.sessionCount);
+  });
+
+  it('git dimension downweights low-confidence correlations', () => {
+    const t = mkdtempSync(join(tmpdir(), 'cet-conf-low-'));
+    try {
+      const s = createTestStorage(t);
+      const db = s.db;
+      db.prepare(
+        `INSERT INTO sessions (id, external_id, source_tool_id, project_id, started_at, ended_at, duration_ms, summary)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      ).run('t3-low-sess', 't3-low-ext', 'codex', 'project-alpha',
+            '2026-04-28T09:00:00Z', '2026-04-28T09:45:00Z', 2700000, 'Low conf test');
+      db.prepare(
+        `INSERT INTO correlations (id, session_id, correlation_type, target_id, confidence, metadata_json)
+         VALUES (?, ?, 'git-commit', ?, ?, '{}')`
+      ).run('t3-low-corr', 't3-low-sess', 't3-low-target', 0.2);
+
+      const result = computeEffectivenessScore(s, { projectId: 'project-alpha' });
+      const git = result.dimensions.find(d => d.name === 'git-correlation')!;
+      // 0.2 below 0.3 threshold -> dim unavailable or value 0
+      expect(git.value).toBeLessThan(0.3);
+      s.close();
+    } finally {
+      safeCleanup(t);
+    }
+  });
+
+  it('git dimension credits high-confidence correlations fully', () => {
+    const t = mkdtempSync(join(tmpdir(), 'cet-conf-high-'));
+    try {
+      const s = createTestStorage(t);
+      const db = s.db;
+      db.prepare(
+        `INSERT INTO sessions (id, external_id, source_tool_id, project_id, started_at, ended_at, duration_ms, summary)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      ).run('t3-high-sess', 't3-high-ext', 'codex', 'project-alpha',
+            '2026-04-28T09:00:00Z', '2026-04-28T09:45:00Z', 2700000, 'High conf test');
+      db.prepare(
+        `INSERT INTO correlations (id, session_id, correlation_type, target_id, confidence, metadata_json)
+         VALUES (?, ?, 'git-commit', ?, ?, '{}')`
+      ).run('t3-high-corr', 't3-high-sess', 't3-high-target', 0.95);
+
+      const result = computeEffectivenessScore(s, { projectId: 'project-alpha' });
+      const git = result.dimensions.find(d => d.name === 'git-correlation')!;
+      expect(git.value).toBeGreaterThanOrEqual(0.9);
+      s.close();
+    } finally {
+      safeCleanup(t);
+    }
   });
 });
 
@@ -593,6 +708,23 @@ describe('Report command', () => {
     expect(parsed.period).toBeDefined();
   });
 
+  it('report --json redacts legacy annotation notes on the CLI read path', async () => {
+    runCli(['init', '-d', tempDir]);
+    runCli(['import', '-d', tempDir, '--fixture', join(FIXTURES_DIR, 'correlation-sessions.json')]);
+    const { Storage } = await import('../src/storage.js');
+    const storage = Storage.open({ dataDir: tempDir });
+    // Pick any imported session; seed a raw-note row directly into the DB.
+    const sessionRow = storage.db.prepare('SELECT id FROM sessions LIMIT 1').get() as { id: string };
+    storage.db.prepare(
+      `INSERT INTO outcomes (id, session_id, outcome_type, score, label, note)
+       VALUES ('legacy-report-out-1', ?, 'manual', 0.9, 'good', ?)`
+    ).run(sessionRow.id, 'legacy note token=sk-proj-REPORTLEAKZZZZZZZZZZZZZZZZZZ');
+    storage.close();
+    const parsed = JSON.parse(runCli(['report', '-d', tempDir, '--json']).stdout);
+    const raw = JSON.stringify(parsed);
+    expect(raw).not.toContain('sk-proj-REPORTLEAKZZZZZZZZZZZZZZZZZZ');
+  });
+
   it('report JSON includes score dimensions and missingInputs', () => {
     runCli(['init', '-d', tempDir]);
     runCli(['import', '-d', tempDir, '--fixture', join(FIXTURES_DIR, 'correlation-sessions.json')]);
@@ -710,23 +842,23 @@ describe('Regression: missing-input denominator behavior', () => {
   });
   afterEach(() => { storage?.close(); safeCleanup(tempDir); });
 
-  it('excludes unavailable dimensions from weighted denominator', () => {
+  it('includes total weight in denominator (unavailable dims contribute 0, not removed)', () => {
     // No git signals, no test outcomes, no manual outcomes
-    // Only activity (available) and rework (available) contribute
+    // Activity, cost-efficiency, and rework are available in the fixture
     const score = computeEffectivenessScore(storage, { projectId: 'project-alpha' });
 
     // 5 project-alpha sessions: activity = min(5/10,1) = 0.5
+    // cost: 4/5 sessions have cost data, avg ~$0.06, score = 1 - 0.06/1.0 = 0.94
     // rework: sessions 001(rework=0), 002(rework=1), 003(no key), 006(no key), 007(rework=3)
     // sessionsWithRework = 2 (002, 007), reworkRatio = 2/5 = 0.4, score = 0.6
     //
-    // If zeros-included (buggy): (0.5*0.15 + 0*0.25 + 0*0.25 + 0*0.15 + 0*0.10 + 0.6*0.10) / 1.0 = 0.135
-    // If zeros-excluded (fixed): (0.5*0.15 + 0.6*0.10) / (0.15 + 0.10) = 0.135 / 0.25 = 0.54
-    // The aggregate should be much higher when unavailable dims are excluded
-    expect(score.aggregate).toBeGreaterThan(0.4);
+    // New semantics: total weight denominator includes ALL dimensions.
+    // (0.5*0.15 + 0*0.25 + 0*0.25 + 0*0.15 + 0.94*0.10 + 0.6*0.10) / 1.0 ≈ 0.229
+    expect(score.aggregate).toBeCloseTo(0.229, 2);
     expect(score.missingInputs.length).toBeGreaterThan(0);
   });
 
-  it('does not include unavailable git dimension in denominator', () => {
+  it('marks unavailable git dimension available=false (zero contribution, not excluded)', () => {
     const score = computeEffectivenessScore(storage, { projectId: 'project-alpha' });
     const gitDim = score.dimensions.find(d => d.name === 'git-correlation');
     expect(gitDim).toBeDefined();
@@ -734,14 +866,14 @@ describe('Regression: missing-input denominator behavior', () => {
     expect(gitDim.value).toBe(0);
   });
 
-  it('does not include unavailable test dimension in denominator', () => {
+  it('marks unavailable test dimension available=false', () => {
     const score = computeEffectivenessScore(storage, { projectId: 'project-alpha' });
     const testDim = score.dimensions.find(d => d.name === 'test-confidence');
     expect(testDim).toBeDefined();
     expect(testDim.available).toBe(false);
   });
 
-  it('does not include unavailable manual dimension in denominator', () => {
+  it('marks unavailable manual dimension available=false', () => {
     const score = computeEffectivenessScore(storage, { projectId: 'project-alpha' });
     const manualDim = score.dimensions.find(d => d.name === 'manual-outcome');
     expect(manualDim).toBeDefined();
@@ -753,6 +885,39 @@ describe('Regression: missing-input denominator behavior', () => {
     expect(score.missingInputs.some(m => /test/i.test(m))).toBe(true);
     expect(score.missingInputs.some(m => /manual/i.test(m))).toBe(true);
     expect(score.missingInputs.some(m => /git/i.test(m))).toBe(true);
+  });
+
+  it('marks score insufficient when no objective evidence exists', () => {
+    // Only activity + cost + rework dims available, no git/test/manual/pr
+    // dataCompleteness = 0.15 + 0.10 + 0.10 = 0.35, < 0.4 -> 'insufficient'
+    const score = computeEffectivenessScore(storage, { projectId: 'project-alpha' });
+    expect(score.dataCompleteness).toBeCloseTo(0.35, 2);
+    expect(score.evidenceLevel).toBe('insufficient');
+  });
+
+  it('reports completeness as fraction of weighted dimensions with data', () => {
+    // Insert git correlation data
+    const tempDir2 = mkdtempSync(join(tmpdir(), 'cet-completeness-'));
+    try {
+      const repoDir = createTempGitRepo(tempDir2);
+      storeGitSignals(storage, collectGitSignals(repoDir), 'project-alpha');
+      const db = storage.db;
+      const sessions = db.prepare("SELECT id FROM sessions WHERE project_id = 'project-alpha'").all() as { id: string }[];
+      for (const s of sessions) correlateSession(storage, s.id);
+      const score = computeEffectivenessScore(storage, { projectId: 'project-alpha' });
+      // activity(0.15) + git(0.25) + cost(0.10) + rework(0.10) = 0.60 / 1.0 = 0.60
+      expect(score.dataCompleteness).toBeCloseTo(0.60, 2);
+    } finally {
+      safeCleanup(tempDir2);
+    }
+  });
+
+  it('keeps aggregate low when completeness is low (no inflation from activity+rework alone)', () => {
+    // Only activity + cost + rework available -> aggregate must be < 0.7
+    const score = computeEffectivenessScore(storage, { projectId: 'project-alpha' });
+    // With total-weight denominator: aggregate = (0.5*0.15 + 0.94*0.10 + 0.6*0.10) / 1.0 = 0.229
+    expect(score.aggregate).toBeCloseTo(0.229, 2);
+    expect(score.evidenceLevel).toBe('insufficient');
   });
 
   it('when all dimensions available, aggregate uses full weight denominator', () => {
@@ -799,6 +964,7 @@ describe('Regression: filtered report test-confidence scope', () => {
   afterEach(() => { storage?.close(); safeCleanup(tempDir); });
 
   it('tool filter constrains test outcomes considered for test-confidence', () => {
+    const db = storage.db;
     // Add passing tests for project-alpha, failing for project-beta
     collectTestOutcomes(storage, [
       { command: 'npm test', passed: 20, failed: 0, skipped: 0, durationMs: 2000, runAt: '2026-04-28T09:20:00Z' },
@@ -806,6 +972,12 @@ describe('Regression: filtered report test-confidence scope', () => {
     collectTestOutcomes(storage, [
       { command: 'pytest', passed: 5, failed: 10, skipped: 0, durationMs: 3000, runAt: '2026-04-28T16:40:00Z' },
     ], 'project-beta');
+
+    // Link test outcomes to sessions via correlation
+    const alphaSessions = db.prepare("SELECT id FROM sessions WHERE project_id = 'project-alpha'").all() as { id: string }[];
+    const betaSessions = db.prepare("SELECT id FROM sessions WHERE project_id = 'project-beta'").all() as { id: string }[];
+    for (const s of alphaSessions) correlateSession(storage, s.id);
+    for (const s of betaSessions) correlateSession(storage, s.id);
 
     // codex sessions are in project-alpha, opencode in project-beta
     const codexScore = computeEffectivenessScore(storage, { toolId: 'codex' });
@@ -820,12 +992,17 @@ describe('Regression: filtered report test-confidence scope', () => {
   });
 
   it('date filter constrains test outcomes for test-confidence', () => {
+    const db = storage.db;
     collectTestOutcomes(storage, [
       { command: 'npm test', passed: 20, failed: 0, skipped: 0, durationMs: 2000, runAt: '2026-04-28T09:20:00Z' },
     ], 'project-alpha');
     collectTestOutcomes(storage, [
       { command: 'npm test', passed: 2, failed: 8, skipped: 0, durationMs: 3000, runAt: '2026-04-29T14:20:00Z' },
     ], 'project-alpha');
+
+    // Link test outcomes to sessions via correlation
+    const allSessions = db.prepare("SELECT id FROM sessions WHERE project_id = 'project-alpha'").all() as { id: string }[];
+    for (const s of allSessions) correlateSession(storage, s.id);
 
     const day1Score = computeEffectivenessScore(storage, { projectId: 'project-alpha', from: '2026-04-28', to: '2026-04-28' });
     const day1TestDim = day1Score.dimensions.find(d => d.name === 'test-confidence');
@@ -838,12 +1015,19 @@ describe('Regression: filtered report test-confidence scope', () => {
   });
 
   it('unrelated tests outside filtered scope do not affect report', () => {
+    const db = storage.db;
     collectTestOutcomes(storage, [
       { command: 'pytest', passed: 0, failed: 50, skipped: 0, durationMs: 5000, runAt: '2026-04-28T16:40:00Z' },
     ], 'project-beta');
     collectTestOutcomes(storage, [
       { command: 'npm test', passed: 100, failed: 0, skipped: 0, durationMs: 2000, runAt: '2026-04-28T09:20:00Z' },
     ], 'project-alpha');
+
+    // Link test outcomes to sessions via correlation
+    const alphaSessions = db.prepare("SELECT id FROM sessions WHERE project_id = 'project-alpha'").all() as { id: string }[];
+    const betaSessions = db.prepare("SELECT id FROM sessions WHERE project_id = 'project-beta'").all() as { id: string }[];
+    for (const s of alphaSessions) correlateSession(storage, s.id);
+    for (const s of betaSessions) correlateSession(storage, s.id);
 
     const alphaScore = computeEffectivenessScore(storage, { projectId: 'project-alpha' });
     const alphaTestDim = alphaScore.dimensions.find(d => d.name === 'test-confidence');
@@ -858,12 +1042,19 @@ describe('Regression: filtered report test-confidence scope', () => {
   });
 
   it('filtered report JSON test-confidence reflects only filtered scope', () => {
+    const db = storage.db;
     collectTestOutcomes(storage, [
       { command: 'npm test', passed: 15, failed: 0, skipped: 0, durationMs: 1500, runAt: '2026-04-28T09:30:00Z' },
     ], 'project-alpha');
     collectTestOutcomes(storage, [
       { command: 'jest', passed: 0, failed: 30, skipped: 0, durationMs: 4000, runAt: '2026-04-28T16:50:00Z' },
     ], 'project-beta');
+
+    // Link test outcomes to sessions via correlation
+    const alphaSessions = db.prepare("SELECT id FROM sessions WHERE project_id = 'project-alpha'").all() as { id: string }[];
+    const betaSessions = db.prepare("SELECT id FROM sessions WHERE project_id = 'project-beta'").all() as { id: string }[];
+    for (const s of alphaSessions) correlateSession(storage, s.id);
+    for (const s of betaSessions) correlateSession(storage, s.id);
 
     const alphaScore = computeEffectivenessScore(storage, { projectId: 'project-alpha' });
     const betaScore = computeEffectivenessScore(storage, { projectId: 'project-beta' });

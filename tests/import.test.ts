@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, rmSync, writeFileSync, readFileSync, copyFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync, readFileSync, copyFileSync, symlinkSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
@@ -22,7 +22,7 @@ import {
 } from '../src/importers/registry.js';
 import { readJsonl } from '../src/importers/utils.js';
 import { redactSecrets, findCanaryLeaks, sanitizeForOutput, CANARY_SECRETS, ALL_CANARIES } from '../src/importers/privacy.js';
-import { safeResolvePath, PathSafetyError } from '../src/importers/path-safety.js';
+import { safeResolvePath, safeReadDir, PathSafetyError } from '../src/importers/path-safety.js';
 import { deriveProjectId } from '../src/project-identity.js';
 
 const FIXTURES_DIR = join(process.cwd(), 'tests', 'fixtures');
@@ -98,6 +98,42 @@ describe('Path safety', () => {
   it('safeResolvePath rejects path traversal with ..', () => {
     const root = '/some/root';
     expect(() => safeResolvePath(root, '../../etc/passwd')).toThrow(PathSafetyError);
+  });
+
+  it('throws when dirPath itself realpaths outside root', () => {
+    const rootDir = mkdtempSync(join(tmpdir(), 'cet-ps-root-'));
+    const outsideDir = mkdtempSync(join(tmpdir(), 'cet-ps-outside-'));
+    try {
+      const linkType = process.platform === 'win32' ? 'junction' : 'dir';
+      const linkPath = join(rootDir, 'escape-link');
+      symlinkSync(outsideDir, linkPath, linkType);
+      // safeReadDir(root, linkPath) — linkPath is inside rootDir but realpaths outside
+      expect(() => safeReadDir(rootDir, linkPath)).toThrow(PathSafetyError);
+    } finally {
+      safeCleanup(rootDir);
+      safeCleanup(outsideDir);
+    }
+  });
+
+  it('skips subdir entries whose realpath escapes root', () => {
+    const rootDir = mkdtempSync(join(tmpdir(), 'cet-ps-root-'));
+    const outsideDir = mkdtempSync(join(tmpdir(), 'cet-ps-outside-'));
+    try {
+      // Create a regular good dir inside root
+      mkdirSync(join(rootDir, 'good'), { recursive: true });
+      // Create a symlink inside root pointing outside
+      const linkType = process.platform === 'win32' ? 'junction' : 'dir';
+      const evilLink = join(rootDir, 'evil');
+      symlinkSync(outsideDir, evilLink, linkType);
+
+      const result = safeReadDir(rootDir, rootDir);
+      expect(result).toContain('good');
+      expect(result).not.toContain('evil');
+      expect(result).toHaveLength(1);
+    } finally {
+      safeCleanup(rootDir);
+      safeCleanup(outsideDir);
+    }
   });
 });
 
@@ -708,7 +744,6 @@ describe('Sensitive metadata key redaction (regression)', () => {
 
 // ─── Regression: symlink/junction escape prevention ─────────────────────────
 
-import { symlinkSync, mkdirSync } from 'node:fs';
 import { join as pathJoin } from 'node:path';
 
 describe('Symlink/junction escape prevention in importers', () => {

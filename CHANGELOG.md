@@ -5,6 +5,39 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-05-11
+
+### Security & Privacy
+
+- **Privacy (blocker)**: redact secrets at every read boundary — annotation notes on `/api/sessions/:id`, `/api/sessions/:id/annotations` POST/PATCH, `/api/export/{json,markdown}`, `cet report --json`, and `cet annotate` terminal echo. Defence-in-depth covers legacy rows persisted before this fix.
+- **Symlink containment**: `safeReadDir` now realpath-checks `dirPath` itself and every directory-like subentry before descent. Junctions that escape root are rejected or skipped.
+- **Cross-origin**: `onRequest` guard blocks all methods for hostile `Origin`, not just writes. GET `/api/sessions/:id/diff` (side-effecting) can no longer be triggered from a malicious page.
+- **Plugin opt-in**: importer plugins under `<dataDir>/importers/plugins/` are no longer auto-loaded. Require `--enable-plugins` on `cet import`. Warning printed when enabled.
+- **Packaging**: `.map` and `.d.ts.map` excluded from published tarball; CI `pack-smoke` job installs the packed tarball and runs `cet --version`/`init`/`report` plus a dashboard-asset and source-map leak check.
+
+### Scoring model changes (trust the number)
+
+- **Aggregate gate**: composite score now uses total-weight denominator (missing dimensions contribute 0 to numerator, not removed from denominator). Exposes `dataCompleteness` + `evidenceLevel` (`insufficient` / `partial` / `strong`). Insufficient-evidence banner + pill in dashboard, "Evidence: …" line in CLI + markdown export.
+- **Confidence-weighted coverage**: git and test dimensions skip correlations below `0.3` confidence and credit `min(maxConfidence, 1)` per qualifying session.
+- **Test-confidence session-scoped**: `test-outcomes` linked via `session_id` or `correlations.type='test-outcome'`. Project-wide pass rate no longer inflates unrelated session scores.
+- **Branch-bonus gate**: +0.1 correlation bonus only fires on non-default branches (`master`/`main`/`develop`/`trunk` excluded).
+- **Config centralization**: `src/scoring/score-service.ts` is the single entry point. API, CLI, and trends analytics all go through it — surfaces agree on weights + thresholds.
+
+### Correlation changes
+
+- `cet sync` re-correlation preserves `pr-outcome` rows (only clears engine-owned types: `git-commit`, `test-outcome`, `manual-outcome`).
+- PR correlation metadata updates on any field diff, not just `state`. Revert flips no longer silently lost.
+
+### API
+
+- Error handler: 4xx returns real `{ error: name, message }`. 5xx returns sanitized `{ error: 'Internal server error' }` only (no internal detail leak).
+- Exports pass server `dataDir` to `generateJsonExport` / `generateMarkdownExport` so scoring config matches overview.
+
+### CLI
+
+- `cet test-outcome` inputs validated by Zod (nonneg ints, ISO datetimes) in inline + `--outcome-json` modes.
+- `cet test -- npm test` resolves `.cmd` shims on Windows via `spawnSafe` without shell interpolation. Path arguments and already-suffixed commands pass through unchanged.
+
 ## [0.2.1] - 2026-05-11
 
 ### Fixed

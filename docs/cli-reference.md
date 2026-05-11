@@ -191,6 +191,7 @@ cet import [options]
 | `--dry-run` | boolean | false | Preview import without writing to database |
 | `--discover` | boolean | false | Scan default AI tool directories for importable data |
 | `--verbose` | boolean | false | Enable verbose/debug output (privacy-safe: secrets/prompts redacted) |
+| `--enable-plugins` | boolean | false | Opt-in loader for third-party importers at `<data-dir>/importers/plugins/` (arbitrary code execution — vet source first; see [plugins.md](./plugins.md)) |
 
 **Modes:**
 
@@ -613,6 +614,9 @@ cet test -- <command>
 - Captures the exit code: 0 = passing, non-zero = failing
 - Stores the outcome in the database correlated with recent sessions
 - Preserves and exits with the wrapped command's exit code
+- Captured stdout/stderr summary passes through the privacy pipeline before storage (secrets redacted)
+
+**Windows:** `cet test -- npm test` works out of the box. The command name is resolved to its `.cmd` shim when needed, without enabling shell interpolation. Absolute paths and commands that already include a `.exe`/`.cmd`/`.bat`/`.ps1` suffix pass through unchanged.
 
 **Examples:**
 ```bash

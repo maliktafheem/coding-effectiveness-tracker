@@ -10,7 +10,46 @@ permissions:
   contents: write
 
 jobs:
+  pack-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - run: npm ci
+
+      - run: npm run build
+
+      - name: Pack tarball
+        run: npm pack --pack-destination ./artifact
+
+      - name: Install tarball in scratch project
+        run: |
+          mkdir smoke
+          cd smoke
+          npm init -y
+          npm install ../artifact/coding-effectiveness-tracker-*.tgz
+          ./node_modules/.bin/cet --version
+          ./node_modules/.bin/cet init --data-dir ./data
+          ./node_modules/.bin/cet report --data-dir ./data || true
+
+      - name: Verify dashboard asset shipped
+        run: test -f smoke/node_modules/coding-effectiveness-tracker/dist/dashboard/index.html
+
+      - name: Confirm source maps are NOT shipped
+        run: |
+          count=$(find smoke/node_modules/coding-effectiveness-tracker/dist -name '*.map' | wc -l)
+          if [ "$count" -ne 0 ]; then
+            echo "FAIL: $count .map files in published tarball"
+            find smoke/node_modules/coding-effectiveness-tracker/dist -name '*.map'
+            exit 1
+          fi
+
   publish:
+    needs: pack-smoke
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

@@ -53,8 +53,13 @@ export function correlateSession(
 
   const results: CorrelationResult[] = [];
 
-  // Clear existing correlations for this session to allow re-correlation
-  db.prepare('DELETE FROM correlations WHERE session_id = ?').run(sessionId);
+  // Re-correlation only clears types this engine owns.
+  // pr-outcome (owned by sync-pr) and any future externally-owned types are preserved.
+  db.prepare(
+    `DELETE FROM correlations
+     WHERE session_id = ?
+       AND correlation_type IN ('git-commit', 'test-outcome', 'manual-outcome')`
+  ).run(sessionId);
 
   // 1. Correlate with Git commits
   const gitCorrelations = correlateWithGitCommits(storage, session, options);
@@ -136,18 +141,25 @@ function correlateWithGitCommits(
     }
   }
 
-  // Branch-aware bonus: if all correlated commits share the same branch,
-  // that suggests focused work on a feature — boost confidence.
+  const DEFAULT_BRANCHES = new Set(['master', 'main', 'develop', 'trunk']);
+  // Branch-aware bonus: if multiple correlated commits share a non-default
+  // feature branch, that's a real signal of focused session work. On
+  // default integration branches (master/main/develop/trunk), shared branch
+  // tells us nothing — skip the bonus.
   if (results.length >= 2) {
     const branches = commits
       .filter(c => results.some(r => r.targetId === c.id))
       .map(c => c.branch as string | null)
       .filter((b): b is string => b != null);
 
-    if (branches.length >= 2 && new Set(branches).size === 1) {
+    if (
+      branches.length >= 2 &&
+      new Set(branches).size === 1 &&
+      !DEFAULT_BRANCHES.has(branches[0].toLowerCase())
+    ) {
       for (const r of results) {
         r.confidence = Math.min(r.confidence + 0.1, 1);
-        r.reasons.push(`all commits on same branch: ${branches[0]}`);
+        r.reasons.push(`all commits on same feature branch: ${branches[0]}`);
       }
     }
   }

@@ -224,11 +224,11 @@ export async function syncPrOutcomes(
         ) as { id: string; metadata_json: string } | undefined;
 
         if (existing) {
-          const existingMeta = JSON.parse(existing.metadata_json) as { state: string };
-          if (existingMeta.state !== cls.state) {
+          // Update when any metadata field diverges (state, reverted, title, etc.).
+          if (existing.metadata_json !== metadataJson) {
             updateStmt.run(metadataJson, existing.id);
           }
-          // Unchanged state: skip (no update, no count)
+          // Unchanged metadata: skip (no update, no count)
         } else {
           insertStmt.run(
             randomUUID(),

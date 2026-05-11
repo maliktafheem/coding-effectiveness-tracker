@@ -58,6 +58,9 @@ export default function OverviewPage({ filterStr }: { filterStr: string }) {
           <div className="value">{pct}%</div>
           <div className="label">Effectiveness</div>
           <div className="score-bar"><div className="score-fill" style={{ width: pct + '%', background: fillColor }}></div></div>
+          <div className={`evidence-pill evidence-pill--${data.score.evidenceLevel}`}>
+            {data.score.evidenceLevel}
+          </div>
         </div>
         <div className="card stat">
           <div className="value">{(data.shipStatusBreakdown.shipped + data.shipStatusBreakdown.reverted + data.shipStatusBreakdown.abandoned + data.shipStatusBreakdown.inFlight) > 0
@@ -89,6 +92,12 @@ export default function OverviewPage({ filterStr }: { filterStr: string }) {
           </tbody>
         </table>
       </div>
+
+      {data.score.evidenceLevel === 'insufficient' && (
+        <div className="card evidence-banner">
+          <p>Insufficient evidence — add git correlation, tests, or annotations to make this number trustworthy.</p>
+        </div>
+      )}
 
       {data.score.missingInputs.length > 0 && (
         <div className="card">

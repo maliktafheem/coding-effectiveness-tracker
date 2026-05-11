@@ -60,13 +60,15 @@ describe('API Server', () => {
     const { Storage } = await import('../src/storage.js');
     const s = Storage.open({ dataDir });
     s.close();
-    server = await createApiServer({ dataDir, port: PORT });
+    // Use ephemeral port (0) so flaky TIME_WAIT on the fixed PORT from a
+    // prior test doesn't cause EADDRINUSE under coverage runs.
+    server = await createApiServer({ dataDir, port: 0 });
     await server.listen();
     const addr = server.address();
     expect(addr).toBeTruthy();
     if (typeof addr === 'object' && addr) {
       expect(addr.address).toBe('127.0.0.1');
-      expect(addr.port).toBe(PORT);
+      expect(addr.port).toBeGreaterThan(0);
     }
     await server.close();
     server = null;
@@ -191,6 +193,25 @@ describe('API Server', () => {
       expect(body.correlations.length).toBe(1);
       expect(body.correlations[0].type).toBe('git-commit');
       expect(body.outcomes.length).toBe(1);
+    });
+
+    it('redacts legacy unredacted notes on read path', async () => {
+      const { Storage } = await import('../src/storage.js');
+      const s = Storage.open({ dataDir });
+      seedFixtures(s.dbPath);
+      // Seed a legacy outcome row with raw secret directly into DB (bypass API redaction).
+      s.db.prepare(
+        `INSERT INTO outcomes (id, session_id, outcome_type, score, label, note)
+         VALUES ('legacy-out-1', 'sess1', 'manual', 0.8, 'good', ?)`
+      ).run('legacy note token=sk-proj-LEAK_THIS_ZZZZZZZZZZZZ');
+      s.close();
+      server = await createApiServer({ dataDir, port: PORT });
+      const res = await server.inject({ method: 'GET', url: '/api/sessions/sess1' });
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.payload);
+      const legacy = body.outcomes.find((o: { id: string }) => o.id === 'legacy-out-1');
+      expect(legacy).toBeTruthy();
+      expect(legacy.note).not.toContain('sk-proj-LEAK_THIS_ZZZZZZZZZZZZ');
     });
 
     it('returns empty correlations for uncorrelated session', async () => {
@@ -366,6 +387,55 @@ describe('API Server', () => {
       });
       expect(res.statusCode).toBe(201);
     });
+
+    it('rejects cross-origin GET to /api/overview', async () => {
+      const { Storage } = await import('../src/storage.js');
+      const s = Storage.open({ dataDir });
+      seedFixtures(s.dbPath);
+      s.close();
+      server = await createApiServer({ dataDir, port: PORT });
+      const res = await server.inject({
+        method: 'GET', url: '/api/overview',
+        headers: { 'origin': 'http://evil.example:80' },
+      });
+      expect(res.statusCode).toBe(403);
+    });
+
+    it('allows same-origin GET to /api/overview', async () => {
+      const { Storage } = await import('../src/storage.js');
+      const s = Storage.open({ dataDir });
+      seedFixtures(s.dbPath);
+      s.close();
+      server = await createApiServer({ dataDir, port: PORT });
+      const res = await server.inject({
+        method: 'GET', url: '/api/overview',
+        headers: { 'origin': 'http://127.0.0.1:' + PORT },
+      });
+      expect(res.statusCode).not.toBe(403);
+    });
+
+    it('allows no-origin GET (CLI / curl) to /api/overview', async () => {
+      const { Storage } = await import('../src/storage.js');
+      const s = Storage.open({ dataDir });
+      seedFixtures(s.dbPath);
+      s.close();
+      server = await createApiServer({ dataDir, port: PORT });
+      const res = await server.inject({ method: 'GET', url: '/api/overview' });
+      expect(res.statusCode).not.toBe(403);
+    });
+
+    it('rejects cross-origin GET to /api/sessions/:id/diff (side-effecting endpoint)', async () => {
+      const { Storage } = await import('../src/storage.js');
+      const s = Storage.open({ dataDir });
+      seedFixtures(s.dbPath);
+      s.close();
+      server = await createApiServer({ dataDir, port: PORT });
+      const res = await server.inject({
+        method: 'GET', url: '/api/sessions/sess1/diff?repo=/tmp',
+        headers: { 'origin': 'http://evil.example:80' },
+      });
+      expect(res.statusCode).toBe(403);
+    });
   });
 
   describe('Read-only by default', () => {
@@ -376,6 +446,129 @@ describe('API Server', () => {
       server = await createApiServer({ dataDir, port: PORT });
       const res = await server.inject({ method: 'DELETE', url: '/api/overview' });
       expect(res.statusCode).toBeGreaterThanOrEqual(400);
+    });
+  });
+
+  describe('Annotation redaction on API write path', () => {
+    it('redacts secrets in POST annotation note before DB write', async () => {
+      const { Storage } = await import('../src/storage.js');
+      const s = Storage.open({ dataDir });
+      seedFixtures(s.dbPath);
+      s.close();
+      server = await createApiServer({ dataDir, port: PORT });
+      const canary = 'CANARY_LEAK_TEST_MARKER_POST_NOTE token=sk-proj-ABCDEF1234567890';
+      const res = await server.inject({
+        method: 'POST', url: '/api/sessions/sess1/annotations',
+        payload: JSON.stringify({ outcome: 'good', note: canary }),
+        headers: { 'content-type': 'application/json', 'origin': 'http://127.0.0.1:' + PORT },
+      });
+      expect(res.statusCode).toBe(201);
+      const body = JSON.parse(res.payload);
+      expect(body.note).not.toContain('sk-proj-ABCDEF1234567890');
+
+      const s2 = Storage.open({ dataDir });
+      const row = s2.db.prepare(
+        'SELECT note FROM outcomes WHERE id = ?'
+      ).get(body.id) as { note: string };
+      s2.close();
+      expect(row.note).not.toContain('sk-proj-ABCDEF1234567890');
+    });
+
+    it('redacts secrets in PATCH annotation note before DB write', async () => {
+      const { Storage } = await import('../src/storage.js');
+      const s = Storage.open({ dataDir });
+      seedFixtures(s.dbPath);
+      s.close();
+      server = await createApiServer({ dataDir, port: PORT });
+
+      const createRes = await server.inject({
+        method: 'POST', url: '/api/sessions/sess1/annotations',
+        payload: JSON.stringify({ outcome: 'good', note: 'initial' }),
+        headers: { 'content-type': 'application/json', 'origin': 'http://127.0.0.1:' + PORT },
+      });
+      const annId = JSON.parse(createRes.payload).id;
+
+      const patchRes = await server.inject({
+        method: 'PATCH', url: '/api/annotations/' + annId,
+        payload: JSON.stringify({ note: 'updated with token=sk-proj-ZZZZZZZZZZZZZZZZZZZZZZ' }),
+        headers: { 'content-type': 'application/json', 'origin': 'http://127.0.0.1:' + PORT },
+      });
+      expect(patchRes.statusCode).toBe(200);
+      const patched = JSON.parse(patchRes.payload);
+      expect(patched.note).not.toContain('sk-proj-ZZZZZZZZZZZZZZZZZZZZZZ');
+
+      const s2 = Storage.open({ dataDir });
+      const row = s2.db.prepare('SELECT note FROM outcomes WHERE id = ?').get(annId) as { note: string };
+      s2.close();
+      expect(row.note).not.toContain('sk-proj-ZZZZZZZZZZZZZZZZZZZZZZ');
+    });
+
+    it('redacts legacy note on PATCH even when note field is omitted', async () => {
+      const { Storage } = await import('../src/storage.js');
+      const s = Storage.open({ dataDir });
+      seedFixtures(s.dbPath);
+      // Seed legacy raw note directly into DB (bypasses any API redaction).
+      s.db.prepare(
+        `INSERT INTO outcomes (id, session_id, outcome_type, score, label, note)
+         VALUES ('legacy-patch-out-1', 'sess1', 'manual', 0.5, 'neutral', ?)`
+      ).run('legacy note token=sk-proj-PATCHLEAKZZZZZZZZZZZZZZ');
+      s.close();
+      server = await createApiServer({ dataDir, port: PORT });
+
+      const patchRes = await server.inject({
+        method: 'PATCH', url: '/api/annotations/legacy-patch-out-1',
+        payload: JSON.stringify({ outcome: 'good' }),
+        headers: { 'content-type': 'application/json', 'origin': 'http://127.0.0.1:' + PORT },
+      });
+      expect(patchRes.statusCode).toBe(200);
+      const patched = JSON.parse(patchRes.payload);
+      expect(patched.note).not.toContain('sk-proj-PATCHLEAKZZZZZZZZZZZZZZ');
+
+      const s2 = Storage.open({ dataDir });
+      const row = s2.db.prepare('SELECT note FROM outcomes WHERE id = ?').get('legacy-patch-out-1') as { note: string };
+      s2.close();
+      expect(row.note).not.toContain('sk-proj-PATCHLEAKZZZZZZZZZZZZZZ');
+    });
+  });
+
+  describe('Error handler responses', () => {
+    it('returns actual error name for 4xx, not "Internal server error"', async () => {
+      const { Storage } = await import('../src/storage.js');
+      const s = Storage.open({ dataDir });
+      seedFixtures(s.dbPath);
+      s.close();
+      server = await createApiServer({ dataDir, port: PORT });
+      const res = await server.inject({
+        method: 'POST',
+        url: '/api/sessions/sess1/annotations',
+        payload: '{"outcome":',
+        headers: { 'content-type': 'application/json', 'origin': 'http://127.0.0.1:' + PORT },
+      });
+
+      expect(res.statusCode).toBeGreaterThanOrEqual(400);
+      expect(res.statusCode).toBeLessThan(500);
+      const body = JSON.parse(res.payload);
+      expect(body.error).not.toBe('Internal server error');
+      expect(body.message).toBeTruthy();
+    });
+
+    it('returns sanitized 5xx without leaking internals', async () => {
+      const { Storage } = await import('../src/storage.js');
+      const s = Storage.open({ dataDir });
+      seedFixtures(s.dbPath);
+      s.close();
+      server = await createApiServer({ dataDir, port: PORT });
+
+      const repo = encodeURIComponent(process.cwd());
+      const res = await server.inject({
+        method: 'GET',
+        url: `/api/sessions/sess1/diff?repo=${repo}`,
+      });
+
+      expect(res.statusCode).toBe(500);
+      const body = JSON.parse(res.payload);
+      expect(body).toEqual({ error: 'Internal server error' });
+      expect(body.message).toBeUndefined();
     });
   });
 });

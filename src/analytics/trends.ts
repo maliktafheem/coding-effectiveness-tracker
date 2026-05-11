@@ -7,6 +7,9 @@
 
 import type { Storage } from '../storage.js';
 import { computeEffectivenessScore } from '../scoring/effectiveness.js';
+import { DEFAULT_WEIGHTS, DEFAULT_THRESHOLDS } from '../scoring/config.js';
+import type { ScoringConfig } from '../scoring/config.js';
+import { loadFullConfig } from '../scoring/score-service.js';
 
 export interface TrendPoint {
   weekStart: string;
@@ -27,8 +30,11 @@ export interface TrendData {
  * Compute weekly trend data from sessions and test outcomes.
  * Groups sessions by ISO week and aggregates per-week metrics.
  */
-export function computeTrends(storage: Storage, projectId?: string): TrendData {
+export function computeTrends(storage: Storage, projectId?: string, dataDir?: string): TrendData {
   const db = storage.db;
+
+  // Load scoring config so every per-window call gets the same weights + thresholds
+  const cfg: ScoringConfig = dataDir ? loadFullConfig(dataDir) : { weights: { ...DEFAULT_WEIGHTS }, thresholds: { ...DEFAULT_THRESHOLDS } };
 
   let query = "SELECT * FROM sessions WHERE started_at IS NOT NULL";
   const params: string[] = [];
@@ -80,13 +86,13 @@ export function computeTrends(storage: Storage, projectId?: string): TrendData {
     }
 
     // Aggregate test outcomes for sessions in this week
-    const sessionIds = weekSessions.map((id) => `'${id}'`).join(',');
     let totalPassed = 0;
     let totalFailed = 0;
-    if (sessionIds.length > 0) {
+    if (weekSessions.length > 0) {
+      const idsJson = JSON.stringify(weekSessions);
       const testRows = db.prepare(
-        `SELECT passed, failed FROM test_outcomes WHERE session_id IN (${sessionIds})`
-      ).all() as { passed: number; failed: number }[];
+        'SELECT passed, failed FROM test_outcomes WHERE session_id IN (SELECT value FROM json_each(?))'
+      ).all(idsJson) as { passed: number; failed: number }[];
       for (const t of testRows) {
         totalPassed += t.passed || 0;
         totalFailed += t.failed || 0;
@@ -96,7 +102,7 @@ export function computeTrends(storage: Storage, projectId?: string): TrendData {
     // Compute aggregate score for this week
     let scoreAggregate = 0;
     if (weekSessions.length > 0) {
-      const score = computeEffectivenessScore(storage, { projectId, from: data.weekStart, to: data.weekEnd });
+      const score = computeEffectivenessScore(storage, { projectId, from: data.weekStart, to: data.weekEnd, weights: cfg.weights, thresholds: cfg.thresholds });
       scoreAggregate = score.aggregate;
     }
 

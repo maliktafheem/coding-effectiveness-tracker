@@ -20,7 +20,41 @@ The following optional parameters can be appended to most GET endpoints for filt
 
 Date-only values (e.g., `from=2025-01-01`) are expanded to `T00:00:00Z` / `T23:59:59Z`.
 
-All error responses use the shape `{ "error": string }`.
+## Error responses
+
+- **4xx** (client error): `{ "error": "<error name>", "message": "<human-readable detail>" }`. For example, a Zod validation failure returns `{ "error": "Bad Request", "message": "passed must be a nonnegative integer" }`.
+- **5xx** (server error): `{ "error": "Internal server error" }`. Internal details are logged server-side but never leaked in the response body.
+
+## Security
+
+- **Loopback-only bind.** The server accepts connections on `127.0.0.1` only.
+- **Origin guard.** Every request with an `Origin` header must match `http://127.0.0.1:<port>`, `http://localhost:<port>`, or `http://[::1]:<port>`. Hostile origins are rejected with `403 { "error": "Cross-origin request rejected" }` for all methods (including GET — side-effecting endpoints like `/api/sessions/:id/diff` populate the diff cache).
+- **No-origin allowed.** Requests without an `Origin` header (curl, CLI, server-to-server fetches) pass through; only browser-triggered cross-origin traffic is blocked.
+- **Privacy at every boundary.** Annotation notes and test output summaries are redacted by the privacy pipeline on write. As defence-in-depth, every read endpoint (`/api/sessions/:id`, `/api/export/json`, `/api/export/markdown`) re-runs redaction against the DB value, so even legacy rows persisted before this fix cannot leak secrets through the API. See [privacy.md](./privacy.md).
+
+---
+
+## Score shape
+
+Responses that embed a score (`/api/overview`, `/api/tools`, `/api/export/json`, `/api/sessions/:id/annotations`) share this shape:
+
+```ts
+{
+  aggregate: number;            // 0..1, all dimensions in denominator
+  dimensions: Array<{
+    name: string;
+    value: number;
+    weight: number;
+    explanation: string;
+    available: boolean;
+  }>;
+  missingInputs: string[];
+  dataCompleteness: number;     // 0..1, fraction of weighted dims with data
+  evidenceLevel: 'insufficient' | 'partial' | 'strong';
+}
+```
+
+`evidenceLevel` tells clients how trustworthy `aggregate` is. A score with `evidenceLevel: 'insufficient'` should not be presented as an effectiveness claim. See [scoring.md](./scoring.md#evidence-level-and-completeness).
 
 ---
 
@@ -93,7 +127,9 @@ Aggregate overview of sessions with effectiveness score.
     ],
     "missingInputs": [
       "Test outcome data not available for tool 'claude-code'"
-    ]
+    ],
+    "dataCompleteness": 0.72,
+    "evidenceLevel": "partial"
   },
   "shipStatusBreakdown": {
     "shipped": 8,

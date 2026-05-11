@@ -143,8 +143,8 @@ describe('N+1 fix behavioral regression: git-correlation value', () => {
 
     expect(gitDim).toBeDefined();
     expect(gitDim!.available).toBe(true);
-    // 3/5 = 0.6
-    expect(gitDim!.value).toBeCloseTo(0.6, 5);
+    // 3 sessions at confidence 0.9 → sum=2.7, ratio=2.7/5=0.54 (confidence-weighted)
+    expect(gitDim!.value).toBeCloseTo(0.54, 5);
     expect(gitDim!.explanation).toMatch(/3 of 5/);
   });
 
@@ -178,9 +178,9 @@ describe('N+1 fix behavioral regression: git-correlation value', () => {
 
     expect(testDim).toBeDefined();
     expect(testDim!.available).toBe(true);
-    // correlationRatio = 2/4 = 0.5; passRate = 10/10 = 1.0
-    // score = 1.0 * 0.6 + 0.5 * 0.4 = 0.8
-    expect(testDim!.value).toBeCloseTo(0.8, 5);
+    // correlationRatio = 0.9+0.9 / 4 = 0.45 (confidence-weighted); passRate = 10/10 = 1.0
+    // score = 1.0 * 0.6 + 0.45 * 0.4 = 0.78
+    expect(testDim!.value).toBeCloseTo(0.78, 5);
   });
 
   it('sessions with zero correlations still report available: false for git-correlation', () => {

@@ -2,6 +2,7 @@ import type { Storage } from '../storage.js';
 import { computeEffectivenessScore } from '../scoring/effectiveness.js';
 import { loadScoringConfig } from '../scoring/config.js';
 import type { ScoreContract } from './contract.js';
+import { redactSecrets } from '../importers/privacy.js';
 
 export interface ExportOptions {
   toolId?: string;
@@ -45,7 +46,7 @@ export function generateJsonExport(storage: Storage, opts: ExportOptions): JsonE
   const sessions = db.prepare(sql).all(...params) as Record<string, unknown>[];
   if (sessions.length === 0) {
     return {
-      score: { aggregate: 0, dimensions: [], missingInputs: ['No sessions available.'] },
+      score: { aggregate: 0, dimensions: [], missingInputs: ['No sessions available.'], dataCompleteness: 0, evidenceLevel: 'insufficient' },
       sessions: [], tools: [], totalSessions: 0,
       period: { from: null, to: null }, empty: true,
       generatedAt: new Date().toISOString(),
@@ -63,8 +64,11 @@ export function generateJsonExport(storage: Storage, opts: ExportOptions): JsonE
       type: c.correlation_type, targetId: c.target_id, confidence: c.confidence,
       reasons: c.metadata_json ? JSON.parse(c.metadata_json as string).reasons : [],
     }));
+    // Defence-in-depth: redact note even if pre-existing rows from older versions
+    // contain unredacted content.
     const outcomes = (db.prepare('SELECT * FROM outcomes WHERE session_id = ?').all(s.id) as Record<string, unknown>[]).map(o => ({
-      type: o.outcome_type, label: o.label, score: o.score, note: o.note,
+      type: o.outcome_type, label: o.label, score: o.score,
+      note: o.note ? redactSecrets(o.note as string) : o.note,
     }));
     const entry: Record<string, unknown> = {
       id: s.id, sourceToolId: s.source_tool_id, projectId: s.project_id,
@@ -84,7 +88,7 @@ export function generateJsonExport(storage: Storage, opts: ExportOptions): JsonE
     return entry;
   });
   return {
-    score: { aggregate: score.aggregate, dimensions: score.dimensions, missingInputs: score.missingInputs },
+    score: { aggregate: score.aggregate, dimensions: score.dimensions, missingInputs: score.missingInputs, dataCompleteness: score.dataCompleteness, evidenceLevel: score.evidenceLevel },
     sessions: enriched, tools, totalSessions: sessions.length,
     period: { from: score.dateRange.from, to: score.dateRange.to },
     empty: false, generatedAt: new Date().toISOString(),
@@ -109,6 +113,7 @@ export function generateMarkdownExport(storage: Storage, opts: ExportOptions): s
   lines.push('- **Tools:** ' + data.tools.join(', '));
   lines.push('- **Period:** ' + (data.period.from || 'N/A') + ' to ' + (data.period.to || 'N/A'));
   lines.push('- **Effectiveness Score:** ' + Math.round(data.score.aggregate * 100) + '%');
+  lines.push('- **Evidence:** ' + data.score.evidenceLevel + ' (' + Math.round(data.score.dataCompleteness * 100) + '% completeness)');
   lines.push('');
   lines.push('## Score Dimensions');
   lines.push('');

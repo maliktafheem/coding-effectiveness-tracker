@@ -2,8 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import type { ServerOptions } from './server.js';
 import { resolveDataDir, isInitialized } from '../config.js';
 import { Storage } from '../storage.js';
-import { computeEffectivenessScore } from '../scoring/effectiveness.js';
-import { loadScoringConfig } from '../scoring/config.js';
+import { computeScore } from '../scoring/score-service.js';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { generateJsonExport, generateMarkdownExport } from './export.js';
@@ -27,6 +26,7 @@ import type {
 import { getSessionDiffs } from '../analytics/diff-service.js';
 import { getAllResults, getResult } from '../analytics/prompt-quality/service.js';
 import { deriveShipStatus, type ShipStatus } from '../correlation/ship-status.js';
+import { redactSecrets } from '../importers/privacy.js';
 
 const VALID_OUTCOMES = new Set([
   'good','accepted','merged','shipped','ok','neutral','partial',
@@ -124,7 +124,7 @@ export function registerRoutes(app: FastifyInstance, opts: ServerOptions): void 
     if (!isInitialized(dataDir)) return { points: [], period: { from: null, to: null } };
     const q = request.query as Record<string, string>;
     const storage = Storage.open({ dataDir });
-    try { return computeTrends(storage, q.project); } finally { storage.close(); }
+    try { return computeTrends(storage, q.project, dataDir); } finally { storage.close(); }
   });
 
   app.get('/api/overview', async (request, reply): Promise<OverviewResponse | ErrorResponse | undefined> => {
@@ -149,19 +149,18 @@ export function registerRoutes(app: FastifyInstance, opts: ServerOptions): void 
       const sessions = db.prepare(sql).all(...params) as Record<string, unknown>[];
       if (sessions.length === 0) {
         return {
-          totalSessions: 0, tools: [], dateRange: { from: null, to: null },
-          outcomeCount: 0,
-          score: { aggregate: 0, dimensions: [], missingInputs: ['No sessions available.'] },
-          empty: true, message: 'No sessions found. Import data with: cet import --fixture <path>',
-          shipStatusBreakdown: { shipped: 0, reverted: 0, abandoned: 0, inFlight: 0, unlinked: 0, noPrData: 0 },
-        };
+        totalSessions: 0, tools: [], dateRange: { from: null, to: null },
+        outcomeCount: 0,
+        score: { aggregate: 0, dimensions: [], missingInputs: ['No sessions available.'], dataCompleteness: 0, evidenceLevel: 'insufficient' },
+        empty: true, message: 'No sessions found. Import data with: cet import --fixture <path>',
+        shipStatusBreakdown: { shipped: 0, reverted: 0, abandoned: 0, inFlight: 0, unlinked: 0, noPrData: 0 },
+      };
       }
       const tools = [...new Set(sessions.map(s => s.source_tool_id as string))];
-      const scoreConfig = loadScoringConfig(opts.dataDir);
-      const score = computeEffectivenessScore(storage, {
+      const score = computeScore(storage, {
+        dataDir: opts.dataDir,
         toolId: filters.tool, projectId: filters.project,
         from: filters.from, to: filters.to,
-        weights: scoreConfig.weights,
       });
       let ocSql = 'SELECT count(*) as cnt FROM outcomes o JOIN sessions s ON o.session_id = s.id WHERE 1=1';
       const ocParams: (string|number)[] = [];
@@ -188,7 +187,13 @@ export function registerRoutes(app: FastifyInstance, opts: ServerOptions): void 
       return {
         totalSessions: sessions.length, tools,
         dateRange: score.dateRange, outcomeCount,
-        score: { aggregate: score.aggregate, dimensions: score.dimensions, missingInputs: score.missingInputs },
+        score: {
+          aggregate: score.aggregate,
+          dimensions: score.dimensions,
+          missingInputs: score.missingInputs,
+          dataCompleteness: score.dataCompleteness,
+          evidenceLevel: score.evidenceLevel,
+        },
         empty: false,
         shipStatusBreakdown: shipBreakdown,
       };
@@ -302,12 +307,10 @@ export function registerRoutes(app: FastifyInstance, opts: ServerOptions): void 
         if (filters.to) { countSql += ' AND started_at <= ?'; countParams.push(filters.to); }
         const { cnt: sessionCount } = db.prepare(countSql).get(...countParams) as { cnt: number };
 
-        const scoringConfig = loadScoringConfig(dataDir);
-        const score = computeEffectivenessScore(storage, {
+        const score = computeScore(storage, {
+          dataDir,
           toolId, projectId: filters.project,
           from: filters.from, to: filters.to,
-          weights: scoringConfig.weights,
-          thresholds: scoringConfig.thresholds,
         });
 
         let outcomeCount: number;
@@ -381,7 +384,9 @@ export function registerRoutes(app: FastifyInstance, opts: ServerOptions): void 
         type: o.outcome_type as string,
         label: o.label as string,
         score: (o.score as number | null) ?? null,
-        note: (o.note as string | null) ?? null,
+        // Defence-in-depth: legacy rows from older versions may hold unredacted content;
+        // redact at read boundary so API responses never expose secrets.
+        note: o.note ? redactSecrets(o.note as string) : null,
       }));
       let reworkCount = 0;
       let sessionMetadata: Record<string, unknown> | null = null;
@@ -507,7 +512,7 @@ export function registerRoutes(app: FastifyInstance, opts: ServerOptions): void 
       const session = db.prepare('SELECT id FROM sessions WHERE id = ?').get(id);
       if (!session) return reply.code(404).send({ error: 'Session not found' });
       const annId = randomUUID();
-      const note = body.note ?? null;
+      const note = body.note ? redactSecrets(body.note) : null;
       const score = body.score ?? null;
       const tagsJson = body.tags ? JSON.stringify(body.tags) : null;
       db.prepare(
@@ -554,7 +559,11 @@ export function registerRoutes(app: FastifyInstance, opts: ServerOptions): void 
 
       const outcome = body.outcome ? body.outcome.toLowerCase().trim() : (existing.label as string);
       const score = body.score ?? (existing.score as number | null);
-      const note = body.note ?? (existing.note as string | null);
+      // Body note: redact new value. Fallback: re-redact existing note in case
+      // older rows were persisted unredacted (defence-in-depth for legacy DB).
+      const note = body.note !== undefined
+        ? (body.note ? redactSecrets(body.note) : null)
+        : (existing.note ? redactSecrets(existing.note as string) : null);
       db.prepare('UPDATE outcomes SET label = ?, score = ?, note = ?, updated_at = datetime(\'now\') WHERE id = ?')
         .run(outcome, score, note, id);
       return { id, sessionId: existing.session_id as string, outcome, score, note };
@@ -563,7 +572,7 @@ export function registerRoutes(app: FastifyInstance, opts: ServerOptions): void 
 
   app.get('/api/export/json', async (request, reply): Promise<JsonExportResponse | ErrorResponse | undefined> => {
     const q = request.query as Record<string, string>;
-    if (!isInitialized(dataDir)) return { sessions: [], score: { aggregate: 0, dimensions: [], missingInputs: [] }, tools: [], totalSessions: 0, period: { from: null, to: null }, empty: true, generatedAt: new Date().toISOString() };
+    if (!isInitialized(dataDir)) return { sessions: [], score: { aggregate: 0, dimensions: [], missingInputs: [], dataCompleteness: 0, evidenceLevel: 'insufficient' }, tools: [], totalSessions: 0, period: { from: null, to: null }, empty: true, generatedAt: new Date().toISOString() };
     const filters = parseFilterParams(q, reply);
     if (!filters) return;
 
@@ -572,6 +581,7 @@ export function registerRoutes(app: FastifyInstance, opts: ServerOptions): void 
       return generateJsonExport(storage, {
         toolId: filters.tool, projectId: filters.project,
         from: filters.from, to: filters.to, raw: filters.raw,
+        dataDir,
       });
     } finally { storage.close(); }
   });
@@ -587,6 +597,7 @@ export function registerRoutes(app: FastifyInstance, opts: ServerOptions): void 
       const md = generateMarkdownExport(storage, {
         toolId: filters.tool, projectId: filters.project,
         from: filters.from, to: filters.to, raw: filters.raw,
+        dataDir,
       });
       return reply.type('text/markdown').send(md);
     } finally { storage.close(); }

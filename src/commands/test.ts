@@ -12,12 +12,13 @@
  *   cet test -- pytest tests/
  */
 
-import { spawn } from 'node:child_process';
 import { resolveDataDir, ensureInitialized } from '../config.js';
+import { spawnSafe } from '../util/spawn-safe.js';
 import { Storage, StorageError } from '../storage.js';
 import { collectTestOutcomes, type TestOutcomeRecord } from '../collectors/test-outcomes.js';
 import { correlateSession } from '../correlation/engine.js';
 import { deriveProjectId } from '../project-identity.js';
+import { redactSecrets } from '../importers/privacy.js';
 
 interface TestOptions {
   dataDir?: string;
@@ -47,7 +48,7 @@ export async function handleTest(opts: TestOptions): Promise<void> {
   const stdoutChunks: string[] = [];
   const stderrChunks: string[] = [];
 
-  const child = spawn(executable, execArgs, {
+  const child = spawnSafe(executable, execArgs, {
     cwd,
     stdio: ['inherit', 'pipe', 'pipe'],
   });
@@ -88,7 +89,8 @@ export async function handleTest(opts: TestOptions): Promise<void> {
       db.prepare('INSERT INTO projects (id, name, path) VALUES (?, ?, ?)').run(projectId, projectId, cwd);
     }
 
-    const outputSummary = stdoutChunks.join('').slice(0, 500) + stderrChunks.join('').slice(0, 500);
+    const rawJoined = stdoutChunks.join('').slice(0, 500) + stderrChunks.join('').slice(0, 500);
+    const outputSummary = rawJoined ? redactSecrets(rawJoined) : undefined;
 
     const outcome: TestOutcomeRecord = {
       command: commandStr,

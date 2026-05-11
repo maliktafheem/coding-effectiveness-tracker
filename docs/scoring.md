@@ -1,6 +1,6 @@
 # Effectiveness Scoring
 
-Coding Effectiveness Tracker computes a **balanced aggregate score** from six dimensions. Each dimension contributes a weighted value between 0 and 1. Dimensions without available data are **excluded** from the weighted denominator — they do not depress the score as zero-valued entries.
+Coding Effectiveness Tracker computes a **balanced aggregate score** from six dimensions. Each dimension contributes a weighted value between 0 and 1. All dimensions contribute to the denominator; dimensions without data contribute 0 to the numerator (rather than being dropped from the denominator, which would inflate the aggregate). The score includes a `dataCompleteness` fraction and `evidenceLevel` label so you can tell at a glance how trustworthy it is.
 
 ## Dimensions
 
@@ -16,27 +16,30 @@ activity = min(sessionCount / activitySessionCap, 1)
 
 ### 2. Git Correlation (weight: 0.25)
 
-Measures what percentage of sessions correlate with local git commits via time-overlap matching. Higher correlation suggests AI sessions produced committed work.
+Measures what fraction of sessions correlate with local git commits via time-overlap matching, **weighted by correlation confidence**. A high-confidence direct match counts fully; a low-confidence timestamp coincidence is ignored.
 
 ```
-gitScore = correlatedSessions / totalSessions
+gitScore = sum(min(maxConfidence, 1) for qualifying sessions) / totalSessions
 ```
 
-Correlation confidence is additive: +0.5 for exact time overlap, +0.2 for proximity bonus, +0.3 if session and commit share the same project.
+- Correlations with `confidence < 0.3` are discarded entirely (too weak to credit).
+- Confidence itself is additive per match: +0.5 for exact time overlap, +0.2 for proximity bonus, +0.3 when session and commit share the same project. A +0.1 "same branch" bonus fires only when all correlated commits share a **non-default** feature branch (integration branches `master`/`main`/`develop`/`trunk` are excluded).
 
-**Available when:** at least one session has git commit correlations.
+**Available when:** at least one session has a git-commit correlation at or above the confidence threshold.
 
 ### 3. Test Confidence (weight: 0.25)
 
-Combines test pass rate with session-test correlation ratio. Shows whether AI-assisted sessions are validated by test outcomes.
+Combines test pass rate with session-test correlation ratio, **scoped to outcomes linked to the filtered sessions**. Project-wide test outcomes that aren't tied to a session (directly via `session_id` or via a `test-outcome` correlation row) are ignored so green CI runs don't inflate unrelated AI sessions.
 
 ```
 passRate = totalPassed / (totalPassed + totalFailed)
-correlationRatio = sessionsWithTests / totalSessions
+correlationRatio = sum(min(maxConfidence, 1) for qualifying sessions) / totalSessions
 testScore = passRate * 0.6 + correlationRatio * 0.4
 ```
 
-**Available when:** test outcomes exist within the session time windows.
+Low-confidence correlations (< 0.3) are discarded from the ratio.
+
+**Available when:** at least one test outcome is linked to one of the filtered sessions.
 
 > **Note:** Test outcome correlation is temporal, not causal. The score reflects that tests commonly run after or near coding sessions. It does not prove the AI session caused the test results.
 
@@ -73,13 +76,29 @@ The dimension is computed via a single SQLite aggregate (`json_extract` on `meta
 
 ## Aggregate Score
 
-Only dimensions with available data contribute:
+All dimensions contribute to the denominator; unavailable dimensions contribute 0 to the numerator. This prevents a project with only activity and rework data from scoring ~100% by excluding missing dimensions from the denominator.
 
 ```
-aggregate = sum(availableValue × weight) / sum(availableWeight)
+aggregate = sum(availableValue × weight) / sum(allWeights)
 ```
 
 Missing dimensions are reported in the output as "Missing/Partial Inputs" — not as zero scores.
+
+## Evidence level and completeness
+
+The score includes a `dataCompleteness` fraction (0..1) and an `evidenceLevel` label alongside the aggregate. These tell you how trustworthy the aggregate number is.
+
+```
+dataCompleteness = sum(availableWeights) / sum(allWeights)
+```
+
+Three evidence levels:
+
+- **`insufficient`** — Either no objective dimension (git correlation, test confidence, manual outcome, or PR outcome) has data, or `dataCompleteness` is below 0.4. The aggregate number should not be taken at face value; add more data sources before relying on it.
+- **`partial`** — At least one objective dimension has data, and completeness is between 0.4 and 0.7. The aggregate is directional but may shift significantly as more signals arrive.
+- **`strong`** — Completeness is 0.7 or higher with at least one objective dimension. The aggregate is a trustworthy measure of coding effectiveness.
+
+In the UI and CLI report, the evidence level is displayed as a colored pill (red / amber / green) or text. When `insufficient`, a banner is shown recommending the user add git correlation, tests, or annotations.
 
 ---
 
@@ -186,7 +205,7 @@ To populate: run `cet sync --pr`. Requires the `gh` CLI installed and authentica
 }
 ```
 
-Default weight is 0. Adding this weight rescales existing weights (users should manually rebalance). No v0.2.0 code actually reads this weight — it is reserved for a future release.
+Default weight is 0. Adding this weight rescales existing weights (users should manually rebalance). No code currently reads this weight — it is reserved for a future release.
 
 ---
 

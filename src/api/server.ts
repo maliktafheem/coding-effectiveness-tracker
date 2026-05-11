@@ -37,32 +37,33 @@ export async function createApiServer(opts: ServerOptions): Promise<DashboardSer
 
   // Consistent JSON error handler for all unhandled errors
   app.setErrorHandler(async (error, _request, reply) => {
-    const err = error as { statusCode?: number; message?: string };
+    const err = error as { statusCode?: number; message?: string; name?: string };
     const statusCode = err.statusCode ?? 500;
-    if (statusCode === 500) {
+
+    if (statusCode >= 500) {
       console.error('Unhandled error:', error);
+      return reply.code(statusCode).send({ error: 'Internal server error' });
     }
-    const message = statusCode === 500 ? 'Internal server error' : (err.message ?? 'Unknown error');
-    return reply.code(statusCode).send({ error: 'Internal server error', message });
+
+    return reply.code(statusCode).send({
+      error: err.name ?? 'Bad Request',
+      message: err.message ?? 'Unknown error',
+    });
   });
 
   // Cross-origin protection middleware
   app.addHook('onRequest', async (request, reply) => {
     const origin = request.headers.origin;
-    if (origin) {
-      const allowed = [
-        'http://127.0.0.1:' + port,
-        'http://localhost:' + port,
-        'http://[::1]:' + port,
-      ];
-      if (!allowed.includes(origin)) {
-        // Block cross-origin writes (POST, PUT, PATCH, DELETE)
-        const method = request.method.toUpperCase();
-        if (method === 'POST' || method === 'PUT' || method === 'PATCH' || method === 'DELETE') {
-          reply.code(403).send({ error: 'Cross-origin write rejected' });
-          return;
-        }
-      }
+    // No origin = non-browser (curl, CLI, server-side fetch). Allow.
+    if (!origin) return;
+    const allowed = [
+      'http://127.0.0.1:' + port,
+      'http://localhost:' + port,
+      'http://[::1]:' + port,
+    ];
+    if (!allowed.includes(origin)) {
+      reply.code(403).send({ error: 'Cross-origin request rejected' });
+      return;
     }
   });
 

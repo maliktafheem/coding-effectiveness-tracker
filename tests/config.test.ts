@@ -3,6 +3,14 @@ import { mkdtempSync, rmSync, existsSync, writeFileSync } from 'node:fs';
 import { join, isAbsolute } from 'node:path';
 import { tmpdir } from 'node:os';
 import { resolveDataDir, ensureDataDir, isInitialized } from '../src/config.js';
+import vitestConfig from '../vitest.config.ts';
+
+describe('vitest config', () => {
+  it('does not set global retry', () => {
+    expect(vitestConfig.test?.retry).toBeUndefined();
+    expect((vitestConfig.test as Record<string, unknown> | undefined)?.testRetries).toBeUndefined();
+  });
+});
 
 describe('config - data directory resolution', () => {
   let tempDir: string;

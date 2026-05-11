@@ -8,6 +8,7 @@
 import { randomUUID } from 'node:crypto';
 import { resolveDataDir, ensureInitialized } from '../config.js';
 import { Storage, StorageError } from '../storage.js';
+import { redactSecrets } from '../importers/privacy.js';
 
 /** Accepted outcome labels. */
 const VALID_OUTCOMES = new Set([
@@ -89,7 +90,7 @@ export async function handleAnnotate(opts: AnnotateOptions): Promise<void> {
       }
     }
 
-    // Insert outcome
+    // Insert outcome with redacted note
     const outcomeId = randomUUID();
     db.prepare(`
       INSERT INTO outcomes (id, session_id, outcome_type, score, label, note, tags_json)
@@ -99,14 +100,14 @@ export async function handleAnnotate(opts: AnnotateOptions): Promise<void> {
       opts.session,
       score,
       outcomeLabel,
-      opts.note || null,
+      opts.note ? redactSecrets(opts.note) : null,
       tagsJson,
     );
 
     console.log(`Annotation recorded for session ${session.external_id} (${session.source_tool_id}):`);
     console.log(`  Outcome: ${outcomeLabel}`);
     if (score !== null) console.log(`  Score: ${score}`);
-    if (opts.note) console.log(`  Note: ${opts.note}`);
+    if (opts.note) console.log(`  Note: ${redactSecrets(opts.note)}`);
   } finally {
     storage?.close();
   }
