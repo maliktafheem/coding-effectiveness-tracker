@@ -402,6 +402,19 @@ describe('API Server', () => {
       const res = await server.inject({ method: 'GET', url: '/api/overview' });
       expect(res.statusCode).not.toBe(403);
     });
+
+    it('rejects cross-origin GET to /api/sessions/:id/diff (side-effecting endpoint)', async () => {
+      const { Storage } = await import('../src/storage.js');
+      const s = Storage.open({ dataDir });
+      seedFixtures(s.dbPath);
+      s.close();
+      server = await createApiServer({ dataDir, port: PORT });
+      const res = await server.inject({
+        method: 'GET', url: '/api/sessions/sess1/diff?repo=/tmp',
+        headers: { 'origin': 'http://evil.example:80' },
+      });
+      expect(res.statusCode).toBe(403);
+    });
   });
 
   describe('Read-only by default', () => {
