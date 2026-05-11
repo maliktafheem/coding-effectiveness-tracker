@@ -124,4 +124,23 @@ describe('cet test command privacy', () => {
     expect(mockSpawn).toHaveBeenCalled();
     expect(mockSpawn.mock.calls[0][0]).toBe('custom-tool.cmd');
   });
+
+  it('does not rewrite command containing a path separator', async () => {
+    const { handleTest } = await import('../src/commands/test.js');
+
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => {
+      throw new Error('process.exit blocked');
+    }) as any);
+
+    try {
+      await handleTest({ dataDir: tempDir, args: ['./scripts/run.sh', '--flag'] });
+    } catch (e: any) {
+      expect(e.message).toBe('process.exit blocked');
+    } finally {
+      exitSpy.mockRestore();
+    }
+
+    expect(mockSpawn).toHaveBeenCalled();
+    expect(mockSpawn.mock.calls[0][0]).toBe('./scripts/run.sh');
+  });
 });
