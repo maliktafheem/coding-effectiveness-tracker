@@ -34,6 +34,7 @@ interface ImportOptions {
   fixture?: string;
   dryRun?: boolean;
   discover?: boolean;
+  enablePlugins?: boolean;
   verbose?: boolean;
 }
 
@@ -63,7 +64,7 @@ export async function handleImport(opts: ImportOptions): Promise<void> {
   // Load custom importer plugins from the data directory's plugins/ subdirectory
   const pluginsDir = join(dataDir, 'plugins');
   if (existsSync(pluginsDir)) {
-    const pluginCount = await loadPluginImporters(pluginsDir);
+    const pluginCount = await loadPluginImporters(pluginsDir, { enablePlugins: opts.enablePlugins ?? false });
     if (pluginCount > 0 && verbose) {
       verboseLog(verbose, `Loaded ${pluginCount} custom importer plugin(s) from plugins/`);
     }

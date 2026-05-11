@@ -370,10 +370,20 @@ export function registerAllImporters(): void {
  * Each plugin file should be a JavaScript module that exports a default
  * or named class implementing the ToolImporter interface.
  *
- * @param pluginsDir - Directory containing plugin .js files
+ * @param pluginsDir - Directory containing plugin .js/.mjs files
+ * @param opts - Plugin loading options
  * @returns Number of plugins successfully loaded
  */
-export async function loadPluginImporters(pluginsDir: string): Promise<number> {
+export async function loadPluginImporters(
+  pluginsDir: string,
+  opts: { enablePlugins?: boolean } = {},
+): Promise<number> {
+  if (!opts.enablePlugins) {
+    return 0;
+  }
+
+  console.warn('[security] Plugin auto-load enabled — executing JS from data dir.');
+
   const { existsSync, readdirSync } = await import('node:fs');
   const { join, extname } = await import('node:path');
   const { pathToFileURL } = await import('node:url');
@@ -381,7 +391,10 @@ export async function loadPluginImporters(pluginsDir: string): Promise<number> {
   if (!existsSync(pluginsDir)) return 0;
 
   let loaded = 0;
-  const files = readdirSync(pluginsDir).filter((f: string) => extname(f) === '.js');
+  const files = readdirSync(pluginsDir).filter((f: string) => {
+    const ext = extname(f);
+    return ext === '.js' || ext === '.mjs';
+  });
 
   for (const file of files) {
     try {

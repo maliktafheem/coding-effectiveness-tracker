@@ -161,7 +161,22 @@ importFromTool(toolId: string, sourcePath: string, options?, storage?): ImportRe
 
 // Import from a fixture JSON file
 runFixtureImport(fixturePath: string, storage?: Storage): ImportResult
+
+// Load plugin importers from data-dir plugins path (disabled by default)
+loadPluginImporters(pluginsDir: string, opts?: { enablePlugins?: boolean }): Promise<number>
 ```
+
+---
+
+## Third-party plugins
+
+Plugin importers are executable JavaScript modules loaded from your data directory plugin path (typically `<dataDir>/plugins`). This is a trust boundary: plugin code runs with your user permissions.
+
+- Plugin loading is **disabled by default**.
+- You must opt in with `cet import --enable-plugins`.
+- Enabling plugins executes arbitrary code from data dir; only run plugins you have audited and trust.
+
+If you are unsure about plugin source integrity, do not enable plugin auto-load.
 
 ---
 
