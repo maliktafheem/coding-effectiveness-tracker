@@ -50,6 +50,8 @@
   },
   "files": [
     "dist",
+    "!dist/**/*.map",
+    "!dist/**/*.d.ts.map",
     "bin",
     "README.md",
     "LICENSE",
