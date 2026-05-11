@@ -86,13 +86,13 @@ export function computeTrends(storage: Storage, projectId?: string, dataDir?: st
     }
 
     // Aggregate test outcomes for sessions in this week
-    const sessionIds = weekSessions.map((id) => `'${id}'`).join(',');
     let totalPassed = 0;
     let totalFailed = 0;
-    if (sessionIds.length > 0) {
+    if (weekSessions.length > 0) {
+      const idsJson = JSON.stringify(weekSessions);
       const testRows = db.prepare(
-        `SELECT passed, failed FROM test_outcomes WHERE session_id IN (${sessionIds})`
-      ).all() as { passed: number; failed: number }[];
+        'SELECT passed, failed FROM test_outcomes WHERE session_id IN (SELECT value FROM json_each(?))'
+      ).all(idsJson) as { passed: number; failed: number }[];
       for (const t of testRows) {
         totalPassed += t.passed || 0;
         totalFailed += t.failed || 0;
