@@ -58,8 +58,8 @@ export default function OverviewPage({ filterStr }: { filterStr: string }) {
           <div className="value">{pct}%</div>
           <div className="label">Effectiveness</div>
           <div className="score-bar"><div className="score-fill" style={{ width: pct + '%', background: fillColor }}></div></div>
-          <div className={`evidence-pill evidence-pill--${data.score.evidenceLevel || 'insufficient'}`}>
-            {data.score.evidenceLevel || 'insufficient'}
+          <div className={`evidence-pill evidence-pill--${data.score.evidenceLevel}`}>
+            {data.score.evidenceLevel}
           </div>
         </div>
         <div className="card stat">

@@ -784,7 +784,7 @@ describe('Regression: missing-input denominator behavior', () => {
     // Only activity + cost + rework available -> aggregate must be < 0.7
     const score = computeEffectivenessScore(storage, { projectId: 'project-alpha' });
     // With total-weight denominator: aggregate = (0.5*0.15 + 0.94*0.10 + 0.6*0.10) / 1.0 = 0.229
-    expect(score.aggregate).toBeLessThan(0.7);
+    expect(score.aggregate).toBeCloseTo(0.229, 2);
     expect(score.evidenceLevel).toBe('insufficient');
   });
 

@@ -569,7 +569,7 @@ export function registerRoutes(app: FastifyInstance, opts: ServerOptions): void 
 
   app.get('/api/export/json', async (request, reply): Promise<JsonExportResponse | ErrorResponse | undefined> => {
     const q = request.query as Record<string, string>;
-    if (!isInitialized(dataDir)) return { sessions: [], score: { aggregate: 0, dimensions: [], missingInputs: [] }, tools: [], totalSessions: 0, period: { from: null, to: null }, empty: true, generatedAt: new Date().toISOString() };
+    if (!isInitialized(dataDir)) return { sessions: [], score: { aggregate: 0, dimensions: [], missingInputs: [], dataCompleteness: 0, evidenceLevel: 'insufficient' }, tools: [], totalSessions: 0, period: { from: null, to: null }, empty: true, generatedAt: new Date().toISOString() };
     const filters = parseFilterParams(q, reply);
     if (!filters) return;
 

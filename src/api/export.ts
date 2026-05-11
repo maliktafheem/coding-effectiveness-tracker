@@ -109,6 +109,7 @@ export function generateMarkdownExport(storage: Storage, opts: ExportOptions): s
   lines.push('- **Tools:** ' + data.tools.join(', '));
   lines.push('- **Period:** ' + (data.period.from || 'N/A') + ' to ' + (data.period.to || 'N/A'));
   lines.push('- **Effectiveness Score:** ' + Math.round(data.score.aggregate * 100) + '%');
+  lines.push('- **Evidence:** ' + data.score.evidenceLevel + ' (' + Math.round(data.score.dataCompleteness * 100) + '% completeness)');
   lines.push('');
   lines.push('## Score Dimensions');
   lines.push('');

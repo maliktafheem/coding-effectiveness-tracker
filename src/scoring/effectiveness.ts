@@ -183,15 +183,19 @@ export function computeEffectivenessScore(
   // All dimensions contribute to the denominator; unavailable dims contribute 0
   // to numerator. This prevents a project with only activity+rework data from
   // scoring ~100% by excluding missing dimensions from the denominator.
-  const totalWeightAll = dimensions.reduce((s, d) => s + d.weight, 0);
-  const weightedSum = dimensions.reduce((s, d) => s + (d.available ? d.value * d.weight : 0), 0);
+  const { totalWeightAll, weightedSum, availableWeight } = dimensions.reduce(
+    (acc, d) => ({
+      totalWeightAll: acc.totalWeightAll + d.weight,
+      weightedSum: acc.weightedSum + (d.available ? d.value * d.weight : 0),
+      availableWeight: acc.availableWeight + (d.available ? d.weight : 0),
+    }),
+    { totalWeightAll: 0, weightedSum: 0, availableWeight: 0 },
+  );
   const aggregate = totalWeightAll > 0 ? weightedSum / totalWeightAll : 0;
-
-  const availableWeight = dimensions.reduce((s, d) => s + (d.available ? d.weight : 0), 0);
   const dataCompleteness = totalWeightAll > 0 ? availableWeight / totalWeightAll : 0;
 
   // Check if any "objective" dimension (git, test, manual, pr) has data.
-  // pr-outcome dimension may not exist yet — treat absence as unavailable.
+  // pr-outcome included for forward compatibility; dimension wiring lands in later tasks.
   const objectiveAvailable = dimensions.some(
     d => d.available && ['git-correlation', 'test-confidence', 'manual-outcome', 'pr-outcome'].includes(d.name),
   );
