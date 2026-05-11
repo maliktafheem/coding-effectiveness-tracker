@@ -500,6 +500,33 @@ describe('API Server', () => {
       s2.close();
       expect(row.note).not.toContain('sk-proj-ZZZZZZZZZZZZZZZZZZZZZZ');
     });
+
+    it('redacts legacy note on PATCH even when note field is omitted', async () => {
+      const { Storage } = await import('../src/storage.js');
+      const s = Storage.open({ dataDir });
+      seedFixtures(s.dbPath);
+      // Seed legacy raw note directly into DB (bypasses any API redaction).
+      s.db.prepare(
+        `INSERT INTO outcomes (id, session_id, outcome_type, score, label, note)
+         VALUES ('legacy-patch-out-1', 'sess1', 'manual', 0.5, 'neutral', ?)`
+      ).run('legacy note token=sk-proj-PATCHLEAKZZZZZZZZZZZZZZ');
+      s.close();
+      server = await createApiServer({ dataDir, port: PORT });
+
+      const patchRes = await server.inject({
+        method: 'PATCH', url: '/api/annotations/legacy-patch-out-1',
+        payload: JSON.stringify({ outcome: 'good' }),
+        headers: { 'content-type': 'application/json', 'origin': 'http://127.0.0.1:' + PORT },
+      });
+      expect(patchRes.statusCode).toBe(200);
+      const patched = JSON.parse(patchRes.payload);
+      expect(patched.note).not.toContain('sk-proj-PATCHLEAKZZZZZZZZZZZZZZ');
+
+      const s2 = Storage.open({ dataDir });
+      const row = s2.db.prepare('SELECT note FROM outcomes WHERE id = ?').get('legacy-patch-out-1') as { note: string };
+      s2.close();
+      expect(row.note).not.toContain('sk-proj-PATCHLEAKZZZZZZZZZZZZZZ');
+    });
   });
 
   describe('Error handler responses', () => {

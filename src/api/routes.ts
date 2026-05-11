@@ -559,9 +559,11 @@ export function registerRoutes(app: FastifyInstance, opts: ServerOptions): void 
 
       const outcome = body.outcome ? body.outcome.toLowerCase().trim() : (existing.label as string);
       const score = body.score ?? (existing.score as number | null);
+      // Body note: redact new value. Fallback: re-redact existing note in case
+      // older rows were persisted unredacted (defence-in-depth for legacy DB).
       const note = body.note !== undefined
         ? (body.note ? redactSecrets(body.note) : null)
-        : (existing.note as string | null);
+        : (existing.note ? redactSecrets(existing.note as string) : null);
       db.prepare('UPDATE outcomes SET label = ?, score = ?, note = ?, updated_at = datetime(\'now\') WHERE id = ?')
         .run(outcome, score, note, id);
       return { id, sessionId: existing.session_id as string, outcome, score, note };
