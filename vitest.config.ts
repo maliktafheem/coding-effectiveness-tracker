@@ -7,7 +7,6 @@ export default defineConfig({
     include: ['tests/**/*.test.ts'],
     testTimeout: 600000,
     hookTimeout: 60000,
-    retry: 2,
     pool: 'forks',
     singleFork: true,
     coverage: {
