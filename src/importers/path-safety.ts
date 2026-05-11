@@ -88,20 +88,33 @@ export function safeLstat(root: string, target: string): Stats {
  * Returns only entry names that are safe to descend into.
  */
 export function safeReadDir(root: string, dirPath: string): string[] {
-  const resolvedRoot = resolve(root);
-  const entries = readdirSync(dirPath);
+  const resolvedRoot = realpathSync(resolve(root));
+  // dirPath itself must realpath inside root
+  let resolvedDir: string;
+  try {
+    resolvedDir = realpathSync(resolve(dirPath));
+  } catch {
+    // Missing or unresolvable dir — return empty rather than bomb importer
+    return [];
+  }
+  const dirRel = relative(resolvedRoot, resolvedDir);
+  if (dirRel.startsWith('..') || isAbsolute(dirRel)) {
+    throw new PathSafetyError(
+      `Directory "${dirPath}" realpath "${resolvedDir}" escapes root "${resolvedRoot}"`,
+    );
+  }
+
+  const entries = readdirSync(resolvedDir);
   const safe: string[] = [];
   for (const entry of entries) {
-    const fullPath = resolve(dirPath, entry);
+    const fullPath = resolve(resolvedDir, entry);
     try {
-      const stat = lstatSync(fullPath);
-      if (stat.isSymbolicLink()) {
-        const realPath = realpathSync(fullPath);
-        const rel = relative(resolvedRoot, realPath);
-        if (rel.startsWith('..')) {
-          // Symlink escapes root — skip
-          continue;
-        }
+      const lst = lstatSync(fullPath);
+      if (lst.isSymbolicLink() || lst.isDirectory()) {
+        // realpath every directory-like entry before letting caller descend
+        const real = realpathSync(fullPath);
+        const rel = relative(resolvedRoot, real);
+        if (rel.startsWith('..') || isAbsolute(rel)) continue;
       }
       safe.push(entry);
     } catch {
