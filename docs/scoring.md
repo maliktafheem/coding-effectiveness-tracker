@@ -1,6 +1,6 @@
 # Effectiveness Scoring
 
-Coding Effectiveness Tracker computes a **balanced aggregate score** from six dimensions. Each dimension contributes a weighted value between 0 and 1. Dimensions without available data are **excluded** from the weighted denominator — they do not depress the score as zero-valued entries.
+Coding Effectiveness Tracker computes a **balanced aggregate score** from six dimensions. Each dimension contributes a weighted value between 0 and 1. All dimensions contribute to the denominator; dimensions without data contribute 0 to the numerator (rather than being dropped from the denominator, which would inflate the aggregate). The score includes a `dataCompleteness` fraction and `evidenceLevel` label so you can tell at a glance how trustworthy it is.
 
 ## Dimensions
 
@@ -16,27 +16,30 @@ activity = min(sessionCount / activitySessionCap, 1)
 
 ### 2. Git Correlation (weight: 0.25)
 
-Measures what percentage of sessions correlate with local git commits via time-overlap matching. Higher correlation suggests AI sessions produced committed work.
+Measures what fraction of sessions correlate with local git commits via time-overlap matching, **weighted by correlation confidence**. A high-confidence direct match counts fully; a low-confidence timestamp coincidence is ignored.
 
 ```
-gitScore = correlatedSessions / totalSessions
+gitScore = sum(min(maxConfidence, 1) for qualifying sessions) / totalSessions
 ```
 
-Correlation confidence is additive: +0.5 for exact time overlap, +0.2 for proximity bonus, +0.3 if session and commit share the same project.
+- Correlations with `confidence < 0.3` are discarded entirely (too weak to credit).
+- Confidence itself is additive per match: +0.5 for exact time overlap, +0.2 for proximity bonus, +0.3 when session and commit share the same project. A +0.1 "same branch" bonus fires only when all correlated commits share a **non-default** feature branch (integration branches `master`/`main`/`develop`/`trunk` are excluded).
 
-**Available when:** at least one session has git commit correlations.
+**Available when:** at least one session has a git-commit correlation at or above the confidence threshold.
 
 ### 3. Test Confidence (weight: 0.25)
 
-Combines test pass rate with session-test correlation ratio. Shows whether AI-assisted sessions are validated by test outcomes.
+Combines test pass rate with session-test correlation ratio, **scoped to outcomes linked to the filtered sessions**. Project-wide test outcomes that aren't tied to a session (directly via `session_id` or via a `test-outcome` correlation row) are ignored so green CI runs don't inflate unrelated AI sessions.
 
 ```
 passRate = totalPassed / (totalPassed + totalFailed)
-correlationRatio = sessionsWithTests / totalSessions
+correlationRatio = sum(min(maxConfidence, 1) for qualifying sessions) / totalSessions
 testScore = passRate * 0.6 + correlationRatio * 0.4
 ```
 
-**Available when:** test outcomes exist within the session time windows.
+Low-confidence correlations (< 0.3) are discarded from the ratio.
+
+**Available when:** at least one test outcome is linked to one of the filtered sessions.
 
 > **Note:** Test outcome correlation is temporal, not causal. The score reflects that tests commonly run after or near coding sessions. It does not prove the AI session caused the test results.
 
@@ -202,7 +205,7 @@ To populate: run `cet sync --pr`. Requires the `gh` CLI installed and authentica
 }
 ```
 
-Default weight is 0. Adding this weight rescales existing weights (users should manually rebalance). No v0.2.0 code actually reads this weight — it is reserved for a future release.
+Default weight is 0. Adding this weight rescales existing weights (users should manually rebalance). No code currently reads this weight — it is reserved for a future release.
 
 ---
 
