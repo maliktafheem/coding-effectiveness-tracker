@@ -60,13 +60,15 @@ describe('API Server', () => {
     const { Storage } = await import('../src/storage.js');
     const s = Storage.open({ dataDir });
     s.close();
-    server = await createApiServer({ dataDir, port: PORT });
+    // Use ephemeral port (0) so flaky TIME_WAIT on the fixed PORT from a
+    // prior test doesn't cause EADDRINUSE under coverage runs.
+    server = await createApiServer({ dataDir, port: 0 });
     await server.listen();
     const addr = server.address();
     expect(addr).toBeTruthy();
     if (typeof addr === 'object' && addr) {
       expect(addr.address).toBe('127.0.0.1');
-      expect(addr.port).toBe(PORT);
+      expect(addr.port).toBeGreaterThan(0);
     }
     await server.close();
     server = null;
