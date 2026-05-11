@@ -166,6 +166,34 @@ describe('syncPrOutcomes', () => {
     expect(count).toBe(1);
   });
 
+  it('updates existing correlation when reverted flips even if state unchanged', async () => {
+    seedSessionWithCommit('s1', 'abc123');
+
+    // Seed existing correlation: merged, not reverted
+    storage.db.prepare(
+      `INSERT INTO correlations (id, session_id, correlation_type, target_id, confidence, metadata_json)
+       VALUES (?, ?, 'pr-outcome', ?, 1, ?)`,
+    ).run('pr-seed-4', 's1', '42', JSON.stringify({
+      prNumber: 42, state: 'merged', title: 'Original', url: 'u', mergedAt: 't', closedAt: null, reverted: false,
+    }));
+
+    // Fixture: original PR still merged AND a Revert PR targeting #42
+    const orig: GhPrRecord = {
+      number: 42, state: 'MERGED', title: 'Original', url: 'u', mergedAt: 't', closedAt: null, body: null,
+      commits: [{ oid: 'abc123' }],
+    };
+    const revert: GhPrRecord = {
+      number: 99, state: 'MERGED', title: 'Revert "Original"', url: 'r', mergedAt: 't2', closedAt: null,
+      body: 'This reverts commit. Fixes #42', commits: [{ oid: 'def456' }],
+    };
+    await syncPrOutcomes(storage, stubRunner([orig, revert]));
+
+    const rows = storage.db.prepare("SELECT metadata_json FROM correlations WHERE correlation_type = 'pr-outcome' AND target_id = '42'").all() as { metadata_json: string }[];
+    expect(rows.length).toBe(1);
+    const meta = JSON.parse(rows[0].metadata_json);
+    expect(meta.reverted).toBe(true);
+  });
+
   it('updates existing correlation when state changes', async () => {
     seedSessionWithCommit('s1', 'abc123');
     const open: GhPrRecord = {
