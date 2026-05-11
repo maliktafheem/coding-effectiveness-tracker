@@ -93,7 +93,7 @@ export default function SessionDetailView({ sessionId, onBack }: { sessionId: st
             </tbody>
           </table>
           <p style={{color: '#94a3b8', fontSize: '0.8rem', marginTop: 8}}>
-            Aggregate score: {Math.round(overviewData.score.aggregate * 100)}%. Only available dimensions contribute to the weighted average; unavailable dimensions do not lower the score.
+            Aggregate score: {Math.round(overviewData.score.aggregate * 100)}%. All dimensions contribute to the denominator; missing dimensions contribute zero. See overview for evidence level.
           </p>
         </div>
       )}

@@ -710,23 +710,23 @@ describe('Regression: missing-input denominator behavior', () => {
   });
   afterEach(() => { storage?.close(); safeCleanup(tempDir); });
 
-  it('excludes unavailable dimensions from weighted denominator', () => {
+  it('includes total weight in denominator (unavailable dims contribute 0, not removed)', () => {
     // No git signals, no test outcomes, no manual outcomes
-    // Only activity (available) and rework (available) contribute
+    // Activity, cost-efficiency, and rework are available in the fixture
     const score = computeEffectivenessScore(storage, { projectId: 'project-alpha' });
 
     // 5 project-alpha sessions: activity = min(5/10,1) = 0.5
+    // cost: 4/5 sessions have cost data, avg ~$0.06, score = 1 - 0.06/1.0 = 0.94
     // rework: sessions 001(rework=0), 002(rework=1), 003(no key), 006(no key), 007(rework=3)
     // sessionsWithRework = 2 (002, 007), reworkRatio = 2/5 = 0.4, score = 0.6
     //
-    // If zeros-included (buggy): (0.5*0.15 + 0*0.25 + 0*0.25 + 0*0.15 + 0*0.10 + 0.6*0.10) / 1.0 = 0.135
-    // If zeros-excluded (fixed): (0.5*0.15 + 0.6*0.10) / (0.15 + 0.10) = 0.135 / 0.25 = 0.54
-    // The aggregate should be much higher when unavailable dims are excluded
-    expect(score.aggregate).toBeGreaterThan(0.4);
+    // New semantics: total weight denominator includes ALL dimensions.
+    // (0.5*0.15 + 0*0.25 + 0*0.25 + 0*0.15 + 0.94*0.10 + 0.6*0.10) / 1.0 ≈ 0.229
+    expect(score.aggregate).toBeCloseTo(0.229, 2);
     expect(score.missingInputs.length).toBeGreaterThan(0);
   });
 
-  it('does not include unavailable git dimension in denominator', () => {
+  it('marks unavailable git dimension available=false (zero contribution, not excluded)', () => {
     const score = computeEffectivenessScore(storage, { projectId: 'project-alpha' });
     const gitDim = score.dimensions.find(d => d.name === 'git-correlation');
     expect(gitDim).toBeDefined();
@@ -734,14 +734,14 @@ describe('Regression: missing-input denominator behavior', () => {
     expect(gitDim.value).toBe(0);
   });
 
-  it('does not include unavailable test dimension in denominator', () => {
+  it('marks unavailable test dimension available=false', () => {
     const score = computeEffectivenessScore(storage, { projectId: 'project-alpha' });
     const testDim = score.dimensions.find(d => d.name === 'test-confidence');
     expect(testDim).toBeDefined();
     expect(testDim.available).toBe(false);
   });
 
-  it('does not include unavailable manual dimension in denominator', () => {
+  it('marks unavailable manual dimension available=false', () => {
     const score = computeEffectivenessScore(storage, { projectId: 'project-alpha' });
     const manualDim = score.dimensions.find(d => d.name === 'manual-outcome');
     expect(manualDim).toBeDefined();
@@ -753,6 +753,39 @@ describe('Regression: missing-input denominator behavior', () => {
     expect(score.missingInputs.some(m => /test/i.test(m))).toBe(true);
     expect(score.missingInputs.some(m => /manual/i.test(m))).toBe(true);
     expect(score.missingInputs.some(m => /git/i.test(m))).toBe(true);
+  });
+
+  it('marks score insufficient when no objective evidence exists', () => {
+    // Only activity + cost + rework dims available, no git/test/manual/pr
+    // dataCompleteness = 0.15 + 0.10 + 0.10 = 0.35, < 0.4 -> 'insufficient'
+    const score = computeEffectivenessScore(storage, { projectId: 'project-alpha' });
+    expect(score.dataCompleteness).toBeCloseTo(0.35, 2);
+    expect(score.evidenceLevel).toBe('insufficient');
+  });
+
+  it('reports completeness as fraction of weighted dimensions with data', () => {
+    // Insert git correlation data
+    const tempDir2 = mkdtempSync(join(tmpdir(), 'cet-completeness-'));
+    try {
+      const repoDir = createTempGitRepo(tempDir2);
+      storeGitSignals(storage, collectGitSignals(repoDir), 'project-alpha');
+      const db = storage.db;
+      const sessions = db.prepare("SELECT id FROM sessions WHERE project_id = 'project-alpha'").all() as { id: string }[];
+      for (const s of sessions) correlateSession(storage, s.id);
+      const score = computeEffectivenessScore(storage, { projectId: 'project-alpha' });
+      // activity(0.15) + git(0.25) + cost(0.10) + rework(0.10) = 0.60 / 1.0 = 0.60
+      expect(score.dataCompleteness).toBeCloseTo(0.60, 2);
+    } finally {
+      safeCleanup(tempDir2);
+    }
+  });
+
+  it('keeps aggregate low when completeness is low (no inflation from activity+rework alone)', () => {
+    // Only activity + cost + rework available -> aggregate must be < 0.7
+    const score = computeEffectivenessScore(storage, { projectId: 'project-alpha' });
+    // With total-weight denominator: aggregate = (0.5*0.15 + 0.94*0.10 + 0.6*0.10) / 1.0 = 0.229
+    expect(score.aggregate).toBeLessThan(0.7);
+    expect(score.evidenceLevel).toBe('insufficient');
   });
 
   it('when all dimensions available, aggregate uses full weight denominator', () => {

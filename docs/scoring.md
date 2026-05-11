@@ -73,13 +73,29 @@ The dimension is computed via a single SQLite aggregate (`json_extract` on `meta
 
 ## Aggregate Score
 
-Only dimensions with available data contribute:
+All dimensions contribute to the denominator; unavailable dimensions contribute 0 to the numerator. This prevents a project with only activity and rework data from scoring ~100% by excluding missing dimensions from the denominator.
 
 ```
-aggregate = sum(availableValue × weight) / sum(availableWeight)
+aggregate = sum(availableValue × weight) / sum(allWeights)
 ```
 
 Missing dimensions are reported in the output as "Missing/Partial Inputs" — not as zero scores.
+
+## Evidence level and completeness
+
+The score includes a `dataCompleteness` fraction (0..1) and an `evidenceLevel` label alongside the aggregate. These tell you how trustworthy the aggregate number is.
+
+```
+dataCompleteness = sum(availableWeights) / sum(allWeights)
+```
+
+Three evidence levels:
+
+- **`insufficient`** — Either no objective dimension (git correlation, test confidence, manual outcome, or PR outcome) has data, or `dataCompleteness` is below 0.4. The aggregate number should not be taken at face value; add more data sources before relying on it.
+- **`partial`** — At least one objective dimension has data, and completeness is between 0.4 and 0.7. The aggregate is directional but may shift significantly as more signals arrive.
+- **`strong`** — Completeness is 0.7 or higher with at least one objective dimension. The aggregate is a trustworthy measure of coding effectiveness.
+
+In the UI and CLI report, the evidence level is displayed as a colored pill (red / amber / green) or text. When `insufficient`, a banner is shown recommending the user add git correlation, tests, or annotations.
 
 ---
 

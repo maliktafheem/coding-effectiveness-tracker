@@ -64,7 +64,7 @@ export async function handleReport(opts: ReportOptions): Promise<void> {
     if (sessions.length === 0) {
       if (opts.json) {
         console.log(JSON.stringify({
-          score: { aggregate: 0, dimensions: [], missingInputs: ['No sessions available. Run cet setup to get started.'] },
+          score: { aggregate: 0, dimensions: [], missingInputs: ['No sessions available. Run cet setup to get started.'], dataCompleteness: 0, evidenceLevel: 'insufficient' },
           sessions: [],
           sources: [],
           period: { from: opts.from || null, to: opts.to || null },
@@ -148,6 +148,8 @@ export async function handleReport(opts: ReportOptions): Promise<void> {
           aggregate: score.aggregate,
           dimensions: score.dimensions,
           missingInputs: score.missingInputs,
+          dataCompleteness: score.dataCompleteness,
+          evidenceLevel: score.evidenceLevel,
         },
         sessions: enrichedSessions,
         sources,
@@ -172,6 +174,7 @@ export async function handleReport(opts: ReportOptions): Promise<void> {
       console.log('');
       console.log('  ── Effectiveness Score ──────────────────────');
       console.log(`  Aggregate: ${Math.round(score.aggregate * 100)}%`);
+      console.log(`  Evidence: ${score.evidenceLevel} (${Math.round(score.dataCompleteness * 100)}% completeness)`);
       console.log('');
       for (const dim of score.dimensions) {
         const pct = Math.round(dim.value * 100);

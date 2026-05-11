@@ -149,12 +149,12 @@ export function registerRoutes(app: FastifyInstance, opts: ServerOptions): void 
       const sessions = db.prepare(sql).all(...params) as Record<string, unknown>[];
       if (sessions.length === 0) {
         return {
-          totalSessions: 0, tools: [], dateRange: { from: null, to: null },
-          outcomeCount: 0,
-          score: { aggregate: 0, dimensions: [], missingInputs: ['No sessions available.'] },
-          empty: true, message: 'No sessions found. Import data with: cet import --fixture <path>',
-          shipStatusBreakdown: { shipped: 0, reverted: 0, abandoned: 0, inFlight: 0, unlinked: 0, noPrData: 0 },
-        };
+        totalSessions: 0, tools: [], dateRange: { from: null, to: null },
+        outcomeCount: 0,
+        score: { aggregate: 0, dimensions: [], missingInputs: ['No sessions available.'], dataCompleteness: 0, evidenceLevel: 'insufficient' },
+        empty: true, message: 'No sessions found. Import data with: cet import --fixture <path>',
+        shipStatusBreakdown: { shipped: 0, reverted: 0, abandoned: 0, inFlight: 0, unlinked: 0, noPrData: 0 },
+      };
       }
       const tools = [...new Set(sessions.map(s => s.source_tool_id as string))];
       const scoreConfig = loadScoringConfig(opts.dataDir);
@@ -188,7 +188,13 @@ export function registerRoutes(app: FastifyInstance, opts: ServerOptions): void 
       return {
         totalSessions: sessions.length, tools,
         dateRange: score.dateRange, outcomeCount,
-        score: { aggregate: score.aggregate, dimensions: score.dimensions, missingInputs: score.missingInputs },
+        score: {
+          aggregate: score.aggregate,
+          dimensions: score.dimensions,
+          missingInputs: score.missingInputs,
+          dataCompleteness: score.dataCompleteness,
+          evidenceLevel: score.evidenceLevel,
+        },
         empty: false,
         shipStatusBreakdown: shipBreakdown,
       };

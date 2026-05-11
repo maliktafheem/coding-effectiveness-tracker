@@ -45,7 +45,7 @@ export function generateJsonExport(storage: Storage, opts: ExportOptions): JsonE
   const sessions = db.prepare(sql).all(...params) as Record<string, unknown>[];
   if (sessions.length === 0) {
     return {
-      score: { aggregate: 0, dimensions: [], missingInputs: ['No sessions available.'] },
+      score: { aggregate: 0, dimensions: [], missingInputs: ['No sessions available.'], dataCompleteness: 0, evidenceLevel: 'insufficient' },
       sessions: [], tools: [], totalSessions: 0,
       period: { from: null, to: null }, empty: true,
       generatedAt: new Date().toISOString(),
@@ -84,7 +84,7 @@ export function generateJsonExport(storage: Storage, opts: ExportOptions): JsonE
     return entry;
   });
   return {
-    score: { aggregate: score.aggregate, dimensions: score.dimensions, missingInputs: score.missingInputs },
+    score: { aggregate: score.aggregate, dimensions: score.dimensions, missingInputs: score.missingInputs, dataCompleteness: score.dataCompleteness, evidenceLevel: score.evidenceLevel },
     sessions: enriched, tools, totalSessions: sessions.length,
     period: { from: score.dateRange.from, to: score.dateRange.to },
     empty: false, generatedAt: new Date().toISOString(),

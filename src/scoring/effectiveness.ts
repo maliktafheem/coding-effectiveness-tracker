@@ -71,6 +71,8 @@ export interface EffectivenessScore {
   missingInputs: string[];
   sessionCount: number;
   dateRange: { from: string | null; to: string | null };
+  dataCompleteness: number; // fraction of total weight with available data (0..1)
+  evidenceLevel: 'insufficient' | 'partial' | 'strong';
 }
 
 export interface ScoreOptions {
@@ -178,17 +180,25 @@ export function computeEffectivenessScore(
   dimensions.push(reworkDim);
 
   // ─── Aggregate Score ───────────────────────────────────────────────────
-  // Only dimensions with available data contribute to the weighted denominator.
-  // Unavailable dimensions do not depress the aggregate as zero-valued entries.
-  let totalWeight = 0;
-  let weightedSum = 0;
-  for (const dim of dimensions) {
-    if (dim.available) {
-      weightedSum += dim.value * dim.weight;
-      totalWeight += dim.weight;
-    }
-  }
-  const aggregate = totalWeight > 0 ? weightedSum / totalWeight : 0;
+  // All dimensions contribute to the denominator; unavailable dims contribute 0
+  // to numerator. This prevents a project with only activity+rework data from
+  // scoring ~100% by excluding missing dimensions from the denominator.
+  const totalWeightAll = dimensions.reduce((s, d) => s + d.weight, 0);
+  const weightedSum = dimensions.reduce((s, d) => s + (d.available ? d.value * d.weight : 0), 0);
+  const aggregate = totalWeightAll > 0 ? weightedSum / totalWeightAll : 0;
+
+  const availableWeight = dimensions.reduce((s, d) => s + (d.available ? d.weight : 0), 0);
+  const dataCompleteness = totalWeightAll > 0 ? availableWeight / totalWeightAll : 0;
+
+  // Check if any "objective" dimension (git, test, manual, pr) has data.
+  // pr-outcome dimension may not exist yet — treat absence as unavailable.
+  const objectiveAvailable = dimensions.some(
+    d => d.available && ['git-correlation', 'test-confidence', 'manual-outcome', 'pr-outcome'].includes(d.name),
+  );
+  let evidenceLevel: 'insufficient' | 'partial' | 'strong';
+  if (!objectiveAvailable || dataCompleteness < 0.4) evidenceLevel = 'insufficient';
+  else if (dataCompleteness < 0.7) evidenceLevel = 'partial';
+  else evidenceLevel = 'strong';
 
   return {
     aggregate: Math.round(aggregate * 1000) / 1000,
@@ -196,6 +206,8 @@ export function computeEffectivenessScore(
     missingInputs,
     sessionCount,
     dateRange,
+    dataCompleteness: Math.round(dataCompleteness * 1000) / 1000,
+    evidenceLevel,
   };
 }
 
