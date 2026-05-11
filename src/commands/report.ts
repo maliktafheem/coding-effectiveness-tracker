@@ -7,8 +7,7 @@
 
 import { resolveDataDir, ensureInitialized } from '../config.js';
 import { Storage, StorageError } from '../storage.js';
-import { computeEffectivenessScore } from '../scoring/effectiveness.js';
-import { loadScoringConfig } from '../scoring/config.js';
+import { computeScore } from '../scoring/score-service.js';
 
 interface ReportOptions {
   dataDir?: string;
@@ -83,14 +82,12 @@ export async function handleReport(opts: ReportOptions): Promise<void> {
     }
 
     // Compute effectiveness score with user config
-    const scoringConfig = loadScoringConfig(opts.dataDir);
-    const score = computeEffectivenessScore(storage, {
+    const score = computeScore(storage, {
+      dataDir,
       projectId: opts.project,
       toolId: opts.tool,
       from: opts.from,
       to: opts.to,
-      weights: scoringConfig.weights,
-      thresholds: scoringConfig.thresholds,
     });
 
     // Gather source tools

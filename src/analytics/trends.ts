@@ -7,6 +7,8 @@
 
 import type { Storage } from '../storage.js';
 import { computeEffectivenessScore } from '../scoring/effectiveness.js';
+import { loadScoringConfig, DEFAULT_WEIGHTS, DEFAULT_THRESHOLDS } from '../scoring/config.js';
+import type { ScoringConfig } from '../scoring/config.js';
 
 export interface TrendPoint {
   weekStart: string;
@@ -27,8 +29,11 @@ export interface TrendData {
  * Compute weekly trend data from sessions and test outcomes.
  * Groups sessions by ISO week and aggregates per-week metrics.
  */
-export function computeTrends(storage: Storage, projectId?: string): TrendData {
+export function computeTrends(storage: Storage, projectId?: string, dataDir?: string): TrendData {
   const db = storage.db;
+
+  // Load scoring config so every per-window call gets the same weights + thresholds
+  const cfg: ScoringConfig = dataDir ? loadScoringConfig(dataDir) : { weights: { ...DEFAULT_WEIGHTS }, thresholds: { ...DEFAULT_THRESHOLDS } };
 
   let query = "SELECT * FROM sessions WHERE started_at IS NOT NULL";
   const params: string[] = [];
@@ -96,7 +101,7 @@ export function computeTrends(storage: Storage, projectId?: string): TrendData {
     // Compute aggregate score for this week
     let scoreAggregate = 0;
     if (weekSessions.length > 0) {
-      const score = computeEffectivenessScore(storage, { projectId, from: data.weekStart, to: data.weekEnd });
+      const score = computeEffectivenessScore(storage, { projectId, from: data.weekStart, to: data.weekEnd, weights: cfg.weights, thresholds: cfg.thresholds });
       scoreAggregate = score.aggregate;
     }
 

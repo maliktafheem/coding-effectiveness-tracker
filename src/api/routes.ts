@@ -2,8 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import type { ServerOptions } from './server.js';
 import { resolveDataDir, isInitialized } from '../config.js';
 import { Storage } from '../storage.js';
-import { computeEffectivenessScore } from '../scoring/effectiveness.js';
-import { loadScoringConfig } from '../scoring/config.js';
+import { computeScore } from '../scoring/score-service.js';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { generateJsonExport, generateMarkdownExport } from './export.js';
@@ -124,7 +123,7 @@ export function registerRoutes(app: FastifyInstance, opts: ServerOptions): void 
     if (!isInitialized(dataDir)) return { points: [], period: { from: null, to: null } };
     const q = request.query as Record<string, string>;
     const storage = Storage.open({ dataDir });
-    try { return computeTrends(storage, q.project); } finally { storage.close(); }
+    try { return computeTrends(storage, q.project, dataDir); } finally { storage.close(); }
   });
 
   app.get('/api/overview', async (request, reply): Promise<OverviewResponse | ErrorResponse | undefined> => {
@@ -157,11 +156,10 @@ export function registerRoutes(app: FastifyInstance, opts: ServerOptions): void 
       };
       }
       const tools = [...new Set(sessions.map(s => s.source_tool_id as string))];
-      const scoreConfig = loadScoringConfig(opts.dataDir);
-      const score = computeEffectivenessScore(storage, {
+      const score = computeScore(storage, {
+        dataDir: opts.dataDir,
         toolId: filters.tool, projectId: filters.project,
         from: filters.from, to: filters.to,
-        weights: scoreConfig.weights,
       });
       let ocSql = 'SELECT count(*) as cnt FROM outcomes o JOIN sessions s ON o.session_id = s.id WHERE 1=1';
       const ocParams: (string|number)[] = [];
@@ -308,12 +306,10 @@ export function registerRoutes(app: FastifyInstance, opts: ServerOptions): void 
         if (filters.to) { countSql += ' AND started_at <= ?'; countParams.push(filters.to); }
         const { cnt: sessionCount } = db.prepare(countSql).get(...countParams) as { cnt: number };
 
-        const scoringConfig = loadScoringConfig(dataDir);
-        const score = computeEffectivenessScore(storage, {
+        const score = computeScore(storage, {
+          dataDir,
           toolId, projectId: filters.project,
           from: filters.from, to: filters.to,
-          weights: scoringConfig.weights,
-          thresholds: scoringConfig.thresholds,
         });
 
         let outcomeCount: number;
