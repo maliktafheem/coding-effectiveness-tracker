@@ -49,20 +49,16 @@ export async function createApiServer(opts: ServerOptions): Promise<DashboardSer
   // Cross-origin protection middleware
   app.addHook('onRequest', async (request, reply) => {
     const origin = request.headers.origin;
-    if (origin) {
-      const allowed = [
-        'http://127.0.0.1:' + port,
-        'http://localhost:' + port,
-        'http://[::1]:' + port,
-      ];
-      if (!allowed.includes(origin)) {
-        // Block cross-origin writes (POST, PUT, PATCH, DELETE)
-        const method = request.method.toUpperCase();
-        if (method === 'POST' || method === 'PUT' || method === 'PATCH' || method === 'DELETE') {
-          reply.code(403).send({ error: 'Cross-origin write rejected' });
-          return;
-        }
-      }
+    // No origin = non-browser (curl, CLI, server-side fetch). Allow.
+    if (!origin) return;
+    const allowed = [
+      'http://127.0.0.1:' + port,
+      'http://localhost:' + port,
+      'http://[::1]:' + port,
+    ];
+    if (!allowed.includes(origin)) {
+      reply.code(403).send({ error: 'Cross-origin request rejected' });
+      return;
     }
   });
 
