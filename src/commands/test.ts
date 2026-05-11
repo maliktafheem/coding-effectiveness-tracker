@@ -18,6 +18,7 @@ import { Storage, StorageError } from '../storage.js';
 import { collectTestOutcomes, type TestOutcomeRecord } from '../collectors/test-outcomes.js';
 import { correlateSession } from '../correlation/engine.js';
 import { deriveProjectId } from '../project-identity.js';
+import { redactSecrets } from '../importers/privacy.js';
 
 interface TestOptions {
   dataDir?: string;
@@ -88,7 +89,8 @@ export async function handleTest(opts: TestOptions): Promise<void> {
       db.prepare('INSERT INTO projects (id, name, path) VALUES (?, ?, ?)').run(projectId, projectId, cwd);
     }
 
-    const outputSummary = stdoutChunks.join('').slice(0, 500) + stderrChunks.join('').slice(0, 500);
+    const rawJoined = stdoutChunks.join('').slice(0, 500) + stderrChunks.join('').slice(0, 500);
+    const outputSummary = rawJoined ? redactSecrets(rawJoined) : undefined;
 
     const outcome: TestOutcomeRecord = {
       command: commandStr,

@@ -31,6 +31,7 @@ import { resolveDataDir, ensureInitialized } from '../config.js';
 import { Storage, StorageError } from '../storage.js';
 import { collectTestOutcomes, type TestOutcomeRecord } from '../collectors/test-outcomes.js';
 import { correlateSession } from '../correlation/engine.js';
+import { redactSecrets } from '../importers/privacy.js';
 
 interface TestOutcomeOptions {
   dataDir?: string;
@@ -139,7 +140,9 @@ export async function handleTestOutcome(opts: TestOutcomeOptions): Promise<void>
           runAt: record.runAt as string,
           sessionId: typeof record.sessionId === 'string' ? record.sessionId as string : undefined,
           commitId: typeof record.commitId === 'string' ? record.commitId as string : undefined,
-          rawOutputSummary: typeof record.rawOutputSummary === 'string' ? record.rawOutputSummary as string : undefined,
+          rawOutputSummary: typeof record.rawOutputSummary === 'string' && record.rawOutputSummary
+            ? redactSecrets(record.rawOutputSummary as string)
+            : undefined,
         });
       }
     } else if (opts.command) {

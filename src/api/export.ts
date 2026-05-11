@@ -2,6 +2,7 @@ import type { Storage } from '../storage.js';
 import { computeEffectivenessScore } from '../scoring/effectiveness.js';
 import { loadScoringConfig } from '../scoring/config.js';
 import type { ScoreContract } from './contract.js';
+import { redactSecrets } from '../importers/privacy.js';
 
 export interface ExportOptions {
   toolId?: string;
@@ -63,8 +64,11 @@ export function generateJsonExport(storage: Storage, opts: ExportOptions): JsonE
       type: c.correlation_type, targetId: c.target_id, confidence: c.confidence,
       reasons: c.metadata_json ? JSON.parse(c.metadata_json as string).reasons : [],
     }));
+    // Defence-in-depth: redact note even if pre-existing rows from older versions
+    // contain unredacted content.
     const outcomes = (db.prepare('SELECT * FROM outcomes WHERE session_id = ?').all(s.id) as Record<string, unknown>[]).map(o => ({
-      type: o.outcome_type, label: o.label, score: o.score, note: o.note,
+      type: o.outcome_type, label: o.label, score: o.score,
+      note: o.note ? redactSecrets(o.note as string) : o.note,
     }));
     const entry: Record<string, unknown> = {
       id: s.id, sourceToolId: s.source_tool_id, projectId: s.project_id,

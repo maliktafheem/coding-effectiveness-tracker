@@ -65,6 +65,27 @@ The API server (`cet serve`) enforces loopback-only binding:
 
 All sensitive content passes through the redaction pipeline before being stored in the database or displayed in terminal output.
 
+### Redacted fields
+
+The following fields pass through the redaction pipeline before being written to the local database:
+
+| Field | Source |
+|-------|--------|
+| Importer session metadata | `src/importers/*` pipelines |
+| Test outcome `raw_output_summary` | Captured stdout/stderr summary from `cet test` and `cet test-outcome` |
+| Manual annotation `note` | User-provided reason text from `cet annotate` |
+
+Exported rows always run through the redaction pipeline again as defence-in-depth, so an export from an older DB that predates this fix still produces redacted output.
+
+### Fields NOT redacted
+
+| Field | Reason |
+|-------|--------|
+| Project paths | Treated as non-secret file locations |
+| Commit hashes and PR titles | Already public Git/GitHub data |
+| Tool IDs (codex, opencode, etc.) | Public identifiers |
+| Session timestamps | Non-sensitive metadata |
+
 ### Secret Pattern Redaction
 
 The `redactSecrets()` function detects and replaces common secret formats:
@@ -153,7 +174,7 @@ The patterns described in the [Redaction Pipeline](#redaction-pipeline) section 
 - **Novel secret formats without a recognized prefix** — a new vendor's API key that uses an unfamiliar structure (e.g., `vnd_abc123xyz...`) will not match any existing pattern and will pass through unredacted.
 - **High-entropy opaque strings in free text** — a random-looking credential embedded in a sentence without a keyword like `key=`, `token=`, or `Bearer` will not be caught.
 - **Custom tool-specific metadata keys** — any metadata key not in the `SENSITIVE_KEY_STEMS` set (`apikey`, `accesstoken`, `authtoken`, `token`, `secret`, `password`, `authorization`, `auth`) will have its value passed through `redactSecrets()` but will not be treated as unconditionally sensitive. A key like `my_internal_credential` or `x-custom-auth-header` will not match.
-- **User-written content in session summaries** — if a session summary or annotation contains a secret that lacks a recognized prefix or keyword context, it will be stored as-is.
+- **User-written content in session summaries** — if a session summary contains a secret that lacks a recognized prefix or keyword context, it will be stored as-is.
 
 ### `metadata_json` and raw exports
 

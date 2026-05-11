@@ -518,5 +518,34 @@ describe('Privacy and local-only verification', () => {
     // Output should be summary counts, not raw record content
     expect(result.stdout).toMatch(/outcomes stored|ingest complete/i);
   });
+
+  it('redacts rawOutputSummary from JSON-file outcome before storage', () => {
+    const jsonPath = join(tempDir, 'test-results-secret.json');
+    const uniqueCmd = 'npm test --privacy-check-' + Date.now();
+    writeFileSync(jsonPath, JSON.stringify([
+      {
+        command: uniqueCmd, passed: 10, failed: 0, skipped: 0, durationMs: 1000,
+        runAt: '2026-04-28T09:30:00Z',
+        rawOutputSummary: 'CANARY_LEAK_TEST_MARKER_GAMMA_ZERO in output',
+      },
+    ]));
+
+    const result = runCli(['test-outcome', '-d', dataDir, '--outcome-json', jsonPath]);
+    expect(result.exitCode).toBe(0);
+
+    const db = new Database(join(dataDir, 'tracker.db'), { readonly: true });
+    try {
+      const row = db.prepare(
+        'SELECT raw_output_summary FROM test_outcomes WHERE command = ?'
+      ).get(uniqueCmd) as { raw_output_summary: string | null } | undefined;
+      expect(row).toBeDefined();
+      if (row && row.raw_output_summary) {
+        expect(row.raw_output_summary).not.toContain('CANARY_LEAK_TEST_MARKER_GAMMA_ZERO');
+        expect(row.raw_output_summary).toContain('[REDACTED]');
+      }
+    } finally {
+      db.close();
+    }
+  });
 });
 
