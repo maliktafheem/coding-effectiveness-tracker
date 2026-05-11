@@ -370,6 +370,51 @@ describe('Correlation confidence scoring', () => {
     expect(remaining.some(r => r.correlation_type === 'pr-outcome')).toBe(true);
   });
 
+  it('does not apply branch-bonus when all commits share a default integration branch', () => {
+    const db = storage.db;
+    const sessionId = 'test-no-bonus-master';
+    db.prepare(
+      `INSERT INTO sessions (id, external_id, source_tool_id, project_id, started_at, ended_at, duration_ms, summary)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(sessionId, 'test-no-bonus-master-ext', 'codex', 'project-alpha',
+          '2026-04-28T09:00:00Z', '2026-04-28T09:45:00Z', 2700000, 'Test no bonus master');
+    db.prepare(
+      `INSERT INTO git_commits (id, hash, short_hash, message, author, authored_at, branch, project_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run('c1', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'aaaaaaa', 'feat: test 1', 'Test', '2026-04-28T09:15:00Z', 'master', 'project-alpha');
+    db.prepare(
+      `INSERT INTO git_commits (id, hash, short_hash, message, author, authored_at, branch, project_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run('c2', 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', 'bbbbbbb', 'feat: test 2', 'Test', '2026-04-28T09:30:00Z', 'master', 'project-alpha');
+
+    const results = correlateSession(storage, sessionId);
+    for (const r of results) {
+      expect(r.reasons.join(' ')).not.toMatch(/same.*branch.*master/i);
+    }
+  });
+
+  it('applies branch-bonus when commits share a non-default feature branch', () => {
+    const db = storage.db;
+    const sessionId = 'test-bonus-feature';
+    db.prepare(
+      `INSERT INTO sessions (id, external_id, source_tool_id, project_id, started_at, ended_at, duration_ms, summary)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(sessionId, 'test-bonus-feature-ext', 'codex', 'project-alpha',
+          '2026-04-28T09:00:00Z', '2026-04-28T09:45:00Z', 2700000, 'Test bonus feature');
+    db.prepare(
+      `INSERT INTO git_commits (id, hash, short_hash, message, author, authored_at, branch, project_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run('c3', 'cccccccccccccccccccccccccccccccccccccccc', 'ccccccc', 'feat: payment 1', 'Test', '2026-04-28T09:15:00Z', 'feat/payments', 'project-alpha');
+    db.prepare(
+      `INSERT INTO git_commits (id, hash, short_hash, message, author, authored_at, branch, project_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run('c4', 'dddddddddddddddddddddddddddddddddddddddd', 'ddddddd', 'feat: payment 2', 'Test', '2026-04-28T09:30:00Z', 'feat/payments', 'project-alpha');
+
+    const results = correlateSession(storage, sessionId);
+    const hasBonus = results.some(r => r.reasons.some(x => x.includes('feature branch')));
+    expect(hasBonus).toBe(true);
+  });
+
   it('uncorrelated session has no git correlations for different project', () => {
     const commits = collectGitSignals(repoDir);
     storeGitSignals(storage, commits, 'project-alpha');
