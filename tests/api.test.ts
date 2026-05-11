@@ -427,6 +427,47 @@ describe('API Server', () => {
       expect(res.statusCode).toBeGreaterThanOrEqual(400);
     });
   });
+
+  describe('Error handler responses', () => {
+    it('returns actual error name for 4xx, not "Internal server error"', async () => {
+      const { Storage } = await import('../src/storage.js');
+      const s = Storage.open({ dataDir });
+      seedFixtures(s.dbPath);
+      s.close();
+      server = await createApiServer({ dataDir, port: PORT });
+      const res = await server.inject({
+        method: 'POST',
+        url: '/api/sessions/sess1/annotations',
+        payload: '{"outcome":',
+        headers: { 'content-type': 'application/json', 'origin': 'http://127.0.0.1:' + PORT },
+      });
+
+      expect(res.statusCode).toBeGreaterThanOrEqual(400);
+      expect(res.statusCode).toBeLessThan(500);
+      const body = JSON.parse(res.payload);
+      expect(body.error).not.toBe('Internal server error');
+      expect(body.message).toBeTruthy();
+    });
+
+    it('returns sanitized 5xx without leaking internals', async () => {
+      const { Storage } = await import('../src/storage.js');
+      const s = Storage.open({ dataDir });
+      seedFixtures(s.dbPath);
+      s.close();
+      server = await createApiServer({ dataDir, port: PORT });
+
+      const repo = encodeURIComponent(process.cwd());
+      const res = await server.inject({
+        method: 'GET',
+        url: `/api/sessions/sess1/diff?repo=${repo}`,
+      });
+
+      expect(res.statusCode).toBe(500);
+      const body = JSON.parse(res.payload);
+      expect(body).toEqual({ error: 'Internal server error' });
+      expect(body.message).toBeUndefined();
+    });
+  });
 });
 
 describe('CLI export command', () => {
